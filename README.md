@@ -22,3 +22,5 @@ The first online search uses Spansh to cache the selected system and nearby mark
 Market data is community-observed and can change before arrival. Every recommendation therefore includes freshness- and liquidity-based confidence.
 
 See [ROADMAP.md](ROADMAP.md) for planned releases.
+
+AI agents should begin with [ai_context/AI_README.md](ai_context/AI_README.md).
