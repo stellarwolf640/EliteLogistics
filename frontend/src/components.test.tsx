@@ -1,0 +1,90 @@
+import { fireEvent, render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { describe, expect, it, vi } from "vitest";
+import { ConfidenceBadge, LocationPicker, SearchFields, TradeCard } from "./components";
+import type { SearchDraft, TradeLeg } from "./types";
+import { defaultDraft } from "./useSearchDraft";
+import { optimizeShip, SHIP_CATALOG } from "./shipCatalog";
+
+const leg: TradeLeg = {
+  source_market_id: 1,
+  source_station: "Origin Hub",
+  source_system_id64: 10,
+  source_system: "Origin",
+  destination_market_id: 2,
+  destination_station: "Mercator Port",
+  destination_system_id64: 20,
+  destination_system: "Waypoint",
+  commodity_id: 100,
+  commodity: "Silver",
+  buy_price: 10_000,
+  sell_price: 23_000,
+  quantity: 100,
+  profit_per_ton: 13_000,
+  trip_profit: 1_300_000,
+  system_distance_ly: 20,
+  jumps: 2,
+  estimated_seconds: 300,
+  credits_per_hour: 15_600_000,
+  distance_to_route_ly: 0,
+  relocation_jumps: 0,
+  relocation_seconds: 0,
+  first_trip_credits_per_hour: 15_600_000,
+  confidence_score: 91,
+  confidence: "High",
+  source_observed_at: "2026-07-28T16:00:00Z",
+  destination_observed_at: "2026-07-28T16:00:00Z",
+  provider: "fixture",
+  warnings: [],
+};
+
+describe("route presentation", () => {
+  it("shows confidence and the full cargo instruction", () => {
+    render(<TradeCard leg={leg} />);
+    expect(screen.getByText("Silver · 100 t")).toBeInTheDocument();
+    expect(screen.getByText(/100 t Silver at 10,000 CR\/t/)).toBeInTheDocument();
+    expect(screen.getByText("High · 91")).toBeInTheDocument();
+  });
+
+  it("labels low confidence clearly", () => {
+    render(<ConfidenceBadge value="Low" score={32} />);
+    expect(screen.getByText("Low · 32")).toHaveClass("confidence-low");
+  });
+
+  it("asks for the current location and exposes the trade search radius", () => {
+    const draft: SearchDraft = { ...defaultDraft, maxSystemDistanceLy: 75 };
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <SearchFields draft={draft} update={() => undefined} />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByText("Where are you?")).toBeInTheDocument();
+    expect(screen.getByText("Look for routes within")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("75")).toBeInTheDocument();
+  });
+
+  it("keeps a location field empty when the operator clears it", () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const onClear = vi.fn();
+    render(
+      <QueryClientProvider client={client}>
+        <LocationPicker label="Where are you?" value="Sol" onSelect={() => undefined} onClear={onClear} />
+      </QueryClientProvider>,
+    );
+    const input = screen.getByDisplayValue("Sol");
+    fireEvent.change(input, { target: { value: "" } });
+    expect(input).toHaveValue("");
+    expect(onClear).toHaveBeenCalledOnce();
+  });
+
+  it("builds different slot-by-slot outfitting manifests", () => {
+    const type6 = SHIP_CATALOG.find((ship) => ship.model === "Type-6 Transporter")!;
+    const cargo = optimizeShip(type6, "Cargo first");
+    const safety = optimizeShip(type6, "Safety first");
+    expect(cargo.core).toHaveLength(8);
+    expect(cargo.optional).toHaveLength(type6.optionalSlots.length);
+    expect(cargo.optional.map((item) => item.module)).not.toEqual(safety.optional.map((item) => item.module));
+    expect(safety.utilities.some((item) => item.module.includes("Shield Booster"))).toBe(true);
+  });
+});

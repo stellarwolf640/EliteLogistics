@@ -1,0 +1,91 @@
+[
+  {
+    "id64": 1,
+    "name": "Origin",
+    "coords": {"x": 0, "y": 0, "z": 0},
+    "date": "2026-07-28T16:00:00Z",
+    "stations": [
+      {
+        "id": 101,
+        "name": "Origin Hub",
+        "type": "Coriolis Starport",
+        "distanceToArrival": 320,
+        "landingPads": {"large": 2, "medium": 4, "small": 8},
+        "market": {
+          "updateTime": "2026-07-28T16:00:00Z",
+          "commodities": [
+            {"commodityId": 10, "symbol": "Silver", "name": "Silver", "category": "Metals", "buyPrice": 10000, "sellPrice": 9800, "supply": 5000, "demand": 1},
+            {"commodityId": 11, "symbol": "ConsumerTechnology", "name": "Consumer Technology", "category": "Consumer Items", "buyPrice": 0, "sellPrice": 7000, "supply": 0, "demand": 5000}
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id64": 2,
+    "name": "Waypoint One",
+    "coords": {"x": 20, "y": 0, "z": 0},
+    "date": "2026-07-28T16:00:00Z",
+    "stations": [
+      {
+        "id": 102,
+        "name": "Mercator Port",
+        "type": "Orbis Starport",
+        "distanceToArrival": 240,
+        "landingPads": {"large": 2, "medium": 4, "small": 8},
+        "market": {
+          "updateTime": "2026-07-28T16:00:00Z",
+          "commodities": [
+            {"commodityId": 10, "symbol": "Silver", "name": "Silver", "category": "Metals", "buyPrice": 0, "sellPrice": 23000, "supply": 0, "demand": 5000},
+            {"commodityId": 11, "symbol": "ConsumerTechnology", "name": "Consumer Technology", "category": "Consumer Items", "buyPrice": 5000, "sellPrice": 4900, "supply": 5000, "demand": 1},
+            {"commodityId": 12, "symbol": "Gold", "name": "Gold", "category": "Metals", "buyPrice": 20000, "sellPrice": 19500, "supply": 5000, "demand": 1}
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id64": 3,
+    "name": "Waypoint Two",
+    "coords": {"x": 40, "y": 1, "z": 0},
+    "date": "2026-07-28T16:00:00Z",
+    "stations": [
+      {
+        "id": 103,
+        "name": "Prospect Terminal",
+        "type": "Ocellus Starport",
+        "distanceToArrival": 480,
+        "landingPads": {"large": 2, "medium": 4, "small": 8},
+        "market": {
+          "updateTime": "2026-07-28T16:00:00Z",
+          "commodities": [
+            {"commodityId": 12, "symbol": "Gold", "name": "Gold", "category": "Metals", "buyPrice": 0, "sellPrice": 36000, "supply": 0, "demand": 5000},
+            {"commodityId": 13, "symbol": "PowerGenerators", "name": "Power Generators", "category": "Machinery", "buyPrice": 2000, "sellPrice": 1900, "supply": 5000, "demand": 1}
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id64": 4,
+    "name": "Destination",
+    "coords": {"x": 60, "y": 0, "z": 0},
+    "date": "2026-07-28T16:00:00Z",
+    "stations": [
+      {
+        "id": 104,
+        "name": "Terminus Station",
+        "type": "Coriolis Starport",
+        "distanceToArrival": 180,
+        "landingPads": {"large": 2, "medium": 4, "small": 8},
+        "market": {
+          "updateTime": "2026-07-28T16:00:00Z",
+          "commodities": [
+            {"commodityId": 13, "symbol": "PowerGenerators", "name": "Power Generators", "category": "Machinery", "buyPrice": 0, "sellPrice": 9000, "supply": 0, "demand": 5000}
+          ]
+        }
+      }
+    ]
+  }
+]
+
