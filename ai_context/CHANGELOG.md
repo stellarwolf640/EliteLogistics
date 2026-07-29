@@ -5,6 +5,9 @@ This changelog records product and architectural changes that future agents need
 ## Unreleased
 
 - Added `ai_context/` onboarding documentation.
+- Documented the local-only `referenceData/` Elite journal and snapshot set.
+- Ignored `referenceData/` so private commander and location data cannot be
+  committed accidentally.
 
 ## v1.1 — 2026-07-28
 
@@ -98,4 +101,3 @@ Before implementation, the project established these principles:
 - Colonization, passengers, and exploration are later shared-engine modes.
 
 The full original design remains in `/elite_logistics_initial_design.md`.
-

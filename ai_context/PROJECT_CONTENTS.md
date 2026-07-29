@@ -13,6 +13,7 @@ EliteLogistics/
 │   ├── src/
 │   └── package.json
 ├── data/                           Local runtime data; ignored by Git
+├── referenceData/                  Private copied Elite files; ignored by Git
 ├── start.ps1                       Production-local launcher
 ├── dev.ps1                         Development launcher
 ├── README.md                       User/developer introduction
@@ -302,6 +303,30 @@ galaxy_stations.json.gz.part
 
 All runtime data is ignored by Git.
 
+## Private game-file reference set
+
+`/referenceData/` is a local-only copy of files produced by Elite Dangerous on
+another computer. It currently provides real examples of:
+
+```text
+Journal.*.log
+Status.json
+Cargo.json
+Market.json
+NavRoute.json
+Shipyard.json
+Outfitting.json
+Backpack.json
+ShipLocker.json
+```
+
+Use this directory to understand real event and snapshot shapes while designing
+the optional game-file adapter. Code and tests must continue working when it is
+absent. Do not commit these files: journal and state records can contain
+commander identity, location history, and other private gameplay data. Tests
+should use narrowly scoped, sanitized fixtures derived from the relevant
+structures instead.
+
 ## Validation
 
 Expected checks before publishing:
@@ -317,4 +342,3 @@ At the time this context was created:
 - Backend: 8 tests passing.
 - Frontend: 5 tests passing.
 - Production frontend build passing.
-

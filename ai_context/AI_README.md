@@ -103,9 +103,33 @@ The versioned formulas and defaults live in the backend schemas and route engine
 - EDDN ingestion is planned but not yet implemented.
 - Local game journal integration is planned but not yet implemented.
 
+### Local Elite reference data
+
+The workspace may contain a private, ignored `/referenceData/` directory copied
+from a computer with Elite Dangerous installed. It is the preferred real-world
+reference for future journal/game-file adapter work when this development
+computer does not have the game installed.
+
+The current reference set includes journal logs plus `Status.json`,
+`Cargo.json`, `Market.json`, `NavRoute.json`, `Shipyard.json`,
+`Outfitting.json`, `Backpack.json`, and `ShipLocker.json`.
+
+Rules for using it:
+
+- Treat the files as read-only source examples.
+- Never assume the folder exists in production, tests, or another checkout.
+- Never make application startup or manual planning depend on it.
+- Do not commit the directory or quote commander-private values in logs,
+  documentation, fixtures, screenshots, or test output.
+- Derive small sanitized deterministic fixtures when automated tests need
+  representative events.
+- A future game-file adapter should accept an explicit directory path so it can
+  point either to the real Saved Games directory or this reference copy.
+
 Never commit:
 
 - `data/`
+- `referenceData/`
 - SQLite databases
 - `.part` archives
 - `.venv/`
@@ -173,4 +197,3 @@ Development launch:
 - Ship module recommendations are not a full Coriolis/EDSY-grade outfitting simulator.
 - Trade Routes do not yet persist campaigns or synchronize group progress.
 - Price history is not retained in v1.
-
