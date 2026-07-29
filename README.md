@@ -68,6 +68,10 @@ Stable update checks use signed manifests from GitHub Releases. Release
 maintainers must configure the `ION_UPDATE_SIGNING_KEY` repository secret; see
 `scripts/configure_release_key.py`.
 
+The Playwright configuration selects Python portably: release automation sets
+`ION_PYTHON_EXECUTABLE`, source development prefers the repository `.venv`,
+and clean environments fall back to `python` from `PATH`.
+
 Market data is community-observed and can change before arrival. Every recommendation therefore includes freshness- and liquidity-based confidence.
 
 See [ROADMAP.md](ROADMAP.md) for planned releases.

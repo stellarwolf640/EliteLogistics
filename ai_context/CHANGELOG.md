@@ -4,6 +4,23 @@ This changelog records product and architectural changes that future agents need
 
 ## 0.2.0 — 2026-07-29
 
+### CI correction
+
+- The first post-implementation GitHub Actions run (`30485946586`) passed
+  backend tests, frontend tests, and the production frontend build, then failed
+  while starting the Playwright acceptance-test server.
+- Cause: `frontend/playwright.config.ts` assumed the repository-local Windows
+  virtual environment existed. GitHub's clean runner installs Python globally
+  for the job and does not create `.venv`.
+- Playwright now accepts `ION_PYTHON_EXECUTABLE`, otherwise uses the local
+  `.venv` interpreter when present and falls back to `python` from `PATH`.
+- The Windows workflow explicitly passes the absolute GitHub-provided Python
+  interpreter path to the acceptance tests.
+- Updated the official GitHub setup actions to their Node 24-based v7 releases,
+  removing the unrelated Node 20 retirement warnings from the failed run.
+- This was a build-automation portability defect, not an ION application or
+  installer runtime failure.
+
 ### Desktop-owned state
 
 - Moved search drafts and data mode from browser local storage into schema-v2
@@ -44,7 +61,7 @@ This changelog records product and architectural changes that future agents need
   download progress, Ed25519 manifest verification, size/SHA-256 validation,
   and silent upgrade handoff.
 - Added stable-tag-only GitHub Actions publishing and installed-application smoke tests.
-- Added 21 backend tests, 8 component tests, and 4 Playwright acceptance scenarios.
+- Added 22 backend tests, 8 component tests, and 4 Playwright acceptance scenarios.
 - Locally validated source, frozen, native-window, install, installed-run,
   uninstall, profile-preservation, and signed-manifest workflows.
 
