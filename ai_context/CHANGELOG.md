@@ -8,6 +8,17 @@ This changelog records product and architectural changes that future agents need
 - Documented the local-only `referenceData/` Elite journal and snapshot set.
 - Ignored `referenceData/` so private commander and location data cannot be
   committed accidentally.
+- Added the optional Elite game-file adapter for journal, status, cargo, market,
+  navigation route, ship, commander, and transaction state.
+- Added game-link configuration and optional automatic planning-state updates.
+- Added current in-game station market synchronization using the
+  `EliteJournal` provider label.
+- Added a left route-progress rail to the full flight console.
+- Added live event-driven route positioning, cargo load/sale completion,
+  navigation targets, remaining plotted jumps, and assigned landing pads.
+- Added manual Previous/Advance route-guide controls when live data is absent.
+- Added sanitized Elite file fixtures and raised the validation baseline to 10
+  backend and 7 frontend tests.
 
 ## v1.1 — 2026-07-28
 

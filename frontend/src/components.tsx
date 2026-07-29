@@ -346,6 +346,7 @@ export function FlightBoard({
   legs,
   summary,
   preflight,
+  activatedAt: suppliedActivatedAt,
   allowPopout = true,
   onClose,
 }: {
@@ -353,9 +354,21 @@ export function FlightBoard({
   legs: TradeLeg[];
   summary: { profit: number; seconds: number; distance?: number; jumps?: number };
   preflight?: string;
+  activatedAt?: string;
   allowPopout?: boolean;
   onClose: () => void;
 }) {
+  const [activatedAt] = useState(suppliedActivatedAt ?? new Date().toISOString());
+  const [manualStep, setManualStep] = useState(0);
+  const elite = useQuery({
+    queryKey: ["elite-status"],
+    queryFn: api.eliteStatus,
+    refetchInterval: 1500,
+  });
+  const live = Boolean(elite.data?.enabled && elite.data.state.game_running);
+  const activeStep = live
+    ? calculateLiveRouteStep(legs, elite.data!.state, activatedAt)
+    : Math.min(manualStep, Math.max(0, legs.length * 2 - 1));
   return (
     <div className="flight-board-backdrop" role="dialog" aria-modal="true" aria-label={title}>
       <section className="flight-board">
@@ -370,9 +383,21 @@ export function FlightBoard({
           {summary.jumps !== undefined && <Metric icon={Gauge} label="Estimated jumps" value={String(summary.jumps)} />}
         </div>
         {preflight && <div className="positioning-note">{preflight}</div>}
-        <div className="manifest">
-          {legs.map((leg, index) => (
-            <article className="manifest-leg" key={`${leg.source_market_id}-${leg.destination_market_id}-${leg.commodity_id}-${index}`}>
+        <div className="flight-board-body">
+          <RouteProgressRail
+            title={title}
+            legs={legs}
+            activeStep={activeStep}
+            live={live}
+            state={elite.data?.state}
+            onPrevious={() => setManualStep((value) => Math.max(0, value - 1))}
+            onNext={() => setManualStep((value) => Math.min(Math.max(0, legs.length * 2 - 1), value + 1))}
+          />
+          <div className="manifest">
+          {legs.map((leg, index) => {
+            const legState = activeStep > index * 2 + 1 ? "complete" : activeStep >= index * 2 ? "active" : "pending";
+            return (
+            <article className={`manifest-leg ${legState}`} key={`${leg.source_market_id}-${leg.destination_market_id}-${leg.commodity_id}-${index}`}>
               <div className="manifest-index">{String(index + 1).padStart(2, "0")}</div>
               <div className="manifest-route">
                 <span>LOAD AT</span>
@@ -395,14 +420,15 @@ export function FlightBoard({
                 <b>+{formatCredits(leg.trip_profit)}</b>
               </div>
             </article>
-          ))}
+          )})}
           {!legs.length && <EmptyState title="Direct flight" body="There are no cargo orders on this plan. Plot the destination in the in-game galaxy map." icon={Route} />}
+          </div>
         </div>
         <footer>
           <span>COMMUNITY MARKET DATA · VERIFY PRICE BEFORE PURCHASE</span>
           <div className="board-actions">
             {allowPopout && <button className="secondary" onClick={() => {
-              localStorage.setItem("elite-logistics-flight-board", JSON.stringify({ title, legs, summary, preflight }));
+              localStorage.setItem("elite-logistics-flight-board", JSON.stringify({ title, legs, summary, preflight, activatedAt }));
               window.open("/flight-board", "elite-logistics-flight-board", "width=1500,height=900");
             }}>Pop out to second screen</button>}
             <button className="primary" onClick={onClose}>{allowPopout ? "Return to planner" : "Close console"}</button>
@@ -410,6 +436,99 @@ export function FlightBoard({
         </footer>
       </section>
     </div>
+  );
+}
+
+function commodityMatches(left: string, right: string) {
+  const normalize = (value: string) => value.toLocaleLowerCase().replace(/^\$/, "").replace(/_name;$/, "").replace(/[^a-z0-9]/g, "");
+  return normalize(left) === normalize(right);
+}
+
+function calculateLiveRouteStep(
+  legs: TradeLeg[],
+  state: import("./types").EliteLiveState,
+  activatedAt: string,
+) {
+  const started = Date.parse(activatedAt);
+  let completed = 0;
+  for (const leg of legs) {
+    const sold = state.transactions.some((transaction) =>
+      transaction.kind === "sell"
+      && transaction.market_id === leg.destination_market_id
+      && commodityMatches(transaction.commodity, leg.commodity)
+      && (!transaction.timestamp || Date.parse(transaction.timestamp) >= started)
+    );
+    if (!sold) break;
+    completed += 1;
+  }
+  if (completed >= legs.length) return legs.length * 2;
+  const leg = legs[completed];
+  const cargoLoaded = state.cargo.some((item) => commodityMatches(item.commodity, leg.commodity) && item.count > 0)
+    || state.transactions.some((transaction) =>
+      transaction.kind === "buy"
+      && transaction.market_id === leg.source_market_id
+      && commodityMatches(transaction.commodity, leg.commodity)
+      && (!transaction.timestamp || Date.parse(transaction.timestamp) >= started)
+    );
+  const atDestination = state.station_market_id === leg.destination_market_id
+    || (state.system_id64 === leg.destination_system_id64 && !state.docked);
+  return completed * 2 + (cargoLoaded || atDestination ? 1 : 0);
+}
+
+function RouteProgressRail({
+  title,
+  legs,
+  activeStep,
+  live,
+  state,
+  onPrevious,
+  onNext,
+}: {
+  title: string;
+  legs: TradeLeg[];
+  activeStep: number;
+  live: boolean;
+  state?: import("./types").EliteLiveState;
+  onPrevious: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <aside className="route-progress">
+      <div className="progress-link-state">
+        <span className={live ? "online" : ""} />
+        <div><b>{live ? "LIVE ROUTE TRACKING" : "ROUTE GUIDE"}</b><small>{live ? state?.phase.replaceAll("_", " ") : "MANUAL PROGRESS"}</small></div>
+      </div>
+      <h3>{title}</h3>
+      {state?.available && (
+        <div className="live-position">
+          <span>Current position</span>
+          <strong>{state.station_name || state.system_name || "Unknown"}</strong>
+          {state.station_name && <small>{state.system_name}</small>}
+          {state.target_system_name && <p>Target: {state.target_system_name}</p>}
+          {state.nav_route.length > 1 && <p>{state.nav_route.length - 1} plotted jumps remaining</p>}
+        </div>
+      )}
+      <div className="progress-steps">
+        {legs.flatMap((leg, legIndex) => [
+          <div className={`progress-step ${activeStep === legIndex * 2 ? "current" : activeStep > legIndex * 2 ? "complete" : ""}`} key={`load-${legIndex}`}>
+            <span>{activeStep > legIndex * 2 ? <Check size={12} /> : String(legIndex + 1).padStart(2, "0")}</span>
+            <div><small>LOAD</small><strong>{leg.quantity} t {leg.commodity}</strong><p>{leg.source_station}<br />{leg.source_system}</p></div>
+          </div>,
+          <div className={`progress-step ${activeStep === legIndex * 2 + 1 ? "current" : activeStep > legIndex * 2 + 1 ? "complete" : ""}`} key={`deliver-${legIndex}`}>
+            <span>{activeStep > legIndex * 2 + 1 ? <Check size={12} /> : "→"}</span>
+            <div><small>DELIVER</small><strong>{leg.destination_station}</strong><p>{leg.destination_system} · {leg.jumps} jumps</p></div>
+          </div>,
+        ])}
+        {!legs.length && <p className="muted">Direct navigation has no cargo milestones.</p>}
+      </div>
+      {!live && legs.length > 0 && (
+        <div className="manual-progress-controls">
+          <button className="secondary" onClick={onPrevious} disabled={activeStep === 0}>Previous</button>
+          <button className="primary" onClick={onNext} disabled={activeStep >= legs.length * 2 - 1}>Advance</button>
+        </div>
+      )}
+      {live && state?.landing_pad !== null && state?.landing_pad !== undefined && <div className="landing-pad">ASSIGNED PAD <strong>{state.landing_pad}</strong></div>}
+    </aside>
   );
 }
 

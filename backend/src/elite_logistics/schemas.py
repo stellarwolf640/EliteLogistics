@@ -179,3 +179,9 @@ class LocationResult(BaseModel):
     system_id64: int
     system_name: str
     subtitle: str
+
+
+class EliteSettingsInput(BaseModel):
+    enabled: bool = False
+    journal_directory: str = Field(default="", max_length=1000)
+    auto_apply_planning_state: bool = False

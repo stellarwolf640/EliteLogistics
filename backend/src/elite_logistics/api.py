@@ -22,10 +22,12 @@ from .database import (
     get_session,
 )
 from .engine import find_immersive_trade_routes, find_round_trips, find_trades
+from .elite_data import EliteDataReader, default_journal_directory, sync_current_market
 from .jobs import start_import_job, start_transit_job
 from .providers import SpanshRemoteProvider
 from .schemas import (
     LocationResult,
+    EliteSettingsInput,
     ImmersiveTradeRouteResponse,
     RoundTripResponse,
     ShipProfileInput,
@@ -48,6 +50,9 @@ DEFAULT_PREFERENCES = {
     "include_restricted": False,
     "hide_low_confidence": True,
     "detour_limit": 0.2,
+    "elite_enabled": False,
+    "elite_journal_directory": "",
+    "elite_auto_apply_planning_state": False,
 }
 
 
@@ -227,6 +232,61 @@ def put_preferences(values: dict, session: Session = Depends(get_session)) -> di
         record.values = merged
     session.commit()
     return merged
+
+
+def _elite_settings(session: Session) -> tuple[dict, Path]:
+    record = session.get(Preference, 1)
+    values = {**DEFAULT_PREFERENCES, **(record.values if record else {})}
+    configured = str(values.get("elite_journal_directory") or "").strip()
+    directory = Path(configured).expanduser().resolve() if configured else default_journal_directory()
+    return values, directory
+
+
+@router.get("/elite/status")
+def elite_status(session: Session = Depends(get_session)) -> dict:
+    values, directory = _elite_settings(session)
+    state = EliteDataReader(directory).read()
+    imported = 0
+    if values["elite_enabled"] and state.available:
+        try:
+            imported = sync_current_market(session, directory, state)
+        except Exception as exc:
+            session.rollback()
+            state.warnings.append(f"Current market could not be synchronized: {exc}")
+    return {
+        "enabled": bool(values["elite_enabled"]),
+        "auto_apply_planning_state": bool(values["elite_auto_apply_planning_state"]),
+        "configured_directory": str(directory),
+        "reference_directory": (
+            str((Path.cwd() / "referenceData").resolve())
+            if (Path.cwd() / "referenceData").is_dir()
+            else None
+        ),
+        "market_records_updated": imported,
+        "state": state.to_dict(),
+    }
+
+
+@router.put("/elite/settings")
+def put_elite_settings(payload: EliteSettingsInput, session: Session = Depends(get_session)) -> dict:
+    record = session.get(Preference, 1)
+    current = {**DEFAULT_PREFERENCES, **(record.values if record else {})}
+    directory = payload.journal_directory.strip()
+    if payload.enabled and directory and not Path(directory).expanduser().is_dir():
+        raise HTTPException(400, "The selected Elite journal directory does not exist.")
+    current.update(
+        {
+            "elite_enabled": payload.enabled,
+            "elite_journal_directory": directory,
+            "elite_auto_apply_planning_state": payload.auto_apply_planning_state,
+        }
+    )
+    if record is None:
+        session.add(Preference(id=1, schema_version=1, values=current))
+    else:
+        record.values = current
+    session.commit()
+    return elite_status(session)
 
 
 ASSUMPTIONS = [

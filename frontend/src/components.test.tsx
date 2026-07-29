@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { describe, expect, it, vi } from "vitest";
-import { ConfidenceBadge, LocationPicker, SearchFields, TradeCard } from "./components";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { ConfidenceBadge, FlightBoard, LocationPicker, SearchFields, TradeCard } from "./components";
 import type { SearchDraft, TradeLeg } from "./types";
 import { defaultDraft } from "./useSearchDraft";
 import { optimizeShip, SHIP_CATALOG } from "./shipCatalog";
@@ -39,6 +39,9 @@ const leg: TradeLeg = {
 };
 
 describe("route presentation", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
   it("shows confidence and the full cargo instruction", () => {
     render(<TradeCard leg={leg} />);
     expect(screen.getByText("Silver · 100 t")).toBeInTheDocument();
@@ -86,5 +89,65 @@ describe("route presentation", () => {
     expect(cargo.optional).toHaveLength(type6.optionalSlots.length);
     expect(cargo.optional.map((item) => item.module)).not.toEqual(safety.optional.map((item) => item.module));
     expect(safety.utilities.some((item) => item.module.includes("Shield Booster"))).toBe(true);
+  });
+
+  it("shows a manual route-progress guide when live game data is unavailable", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => undefined)));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <FlightBoard
+          title="Test route"
+          legs={[leg]}
+          summary={{ profit: leg.trip_profit, seconds: leg.estimated_seconds }}
+          onClose={() => undefined}
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByText("ROUTE GUIDE")).toBeInTheDocument();
+    expect(screen.getByText("MANUAL PROGRESS")).toBeInTheDocument();
+    expect(screen.getByText("Advance")).toBeInTheDocument();
+  });
+
+  it("switches the progress rail to live tracking when Elite is running", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        enabled: true,
+        auto_apply_planning_state: false,
+        configured_directory: "C:\\Elite",
+        reference_directory: null,
+        market_records_updated: 0,
+        state: {
+          available: true,
+          source_kind: "journal",
+          game_running: true,
+          phase: "supercruise",
+          station_market_id: null,
+          station_name: null,
+          system_id64: 10,
+          system_name: "Origin",
+          target_system_name: "Waypoint",
+          nav_route: [],
+          cargo: [{ commodity: "Silver", canonical_commodity: "silver", count: 100, stolen: 0, mission_id: null }],
+          transactions: [],
+          landing_pad: null,
+        },
+      }),
+    }));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <FlightBoard
+          title="Live route"
+          legs={[leg]}
+          summary={{ profit: leg.trip_profit, seconds: leg.estimated_seconds }}
+          onClose={() => undefined}
+        />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText("LIVE ROUTE TRACKING")).toBeInTheDocument();
+    expect(screen.getByText("Target: Waypoint")).toBeInTheDocument();
   });
 });

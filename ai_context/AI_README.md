@@ -22,6 +22,8 @@ Its current capabilities are:
 - Manual commander, location, balance, reserve, and ship state.
 - Ship profiles and role-specific module recommendations.
 - Live Spansh lookup, regional caching, and an optional full-galaxy import.
+- Optional Elite journal/game-file state, current-market synchronization, and
+  live route progress.
 
 ## Product priorities
 
@@ -40,7 +42,7 @@ Trade Routes are intended to become the flagship feature. Unlike Best Trades, th
 ## Non-negotiable architecture
 
 - Manual player state is canonical.
-- Future game-file integration may populate the same editable state, but must never become required.
+- Game-file integration may populate the same editable state, but must never become required.
 - Market-provider details stay behind provider-neutral boundaries.
 - Every market observation retains its provider and observation timestamp.
 - Missing or stale data must never be silently presented as current.
@@ -101,7 +103,8 @@ The versioned formulas and defaults live in the backend schemas and route engine
 - The full `galaxy_stations.json.gz` archive is optional and may be very large.
 - Interrupted full downloads use a `.part` file and resume with HTTP range requests.
 - EDDN ingestion is planned but not yet implemented.
-- Local game journal integration is planned but not yet implemented.
+- Local game journal integration is implemented through
+  `backend/src/elite_logistics/elite_data.py`.
 
 ### Local Elite reference data
 
@@ -123,8 +126,8 @@ Rules for using it:
   documentation, fixtures, screenshots, or test output.
 - Derive small sanitized deterministic fixtures when automated tests need
   representative events.
-- A future game-file adapter should accept an explicit directory path so it can
-  point either to the real Saved Games directory or this reference copy.
+- The game-file adapter accepts an explicit directory path so it can point
+  either to the real Saved Games directory or this reference copy.
 
 Never commit:
 

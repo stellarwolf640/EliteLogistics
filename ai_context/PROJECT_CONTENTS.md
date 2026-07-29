@@ -43,6 +43,8 @@ GET    /api/health
 GET    /api/data/status
 GET    /api/data/spansh-pack-info
 GET    /api/locations/search
+GET    /api/elite/status
+PUT    /api/elite/settings
 
 GET    /api/ship-profiles
 POST   /api/ship-profiles
@@ -102,6 +104,18 @@ Market-provider implementations and normalization.
 - `SpanshRemoteProvider` handles location search, system dumps, and trade-candidate hydration.
 - `SpanshDumpProvider` streams local JSON/gzip records into normalized tables.
 - New provider work should normalize into the existing database models.
+
+### `backend/src/elite_logistics/elite_data.py`
+
+Optional local Elite adapter:
+
+- Reconstructs current commander, location, ship, cargo, navigation, and flight
+  state from the newest journal.
+- Reads `Status.json`, `Cargo.json`, `Market.json`, and `NavRoute.json`.
+- Captures recent buy/sell events for route-leg completion.
+- Distinguishes live journal activity from historical copied reference data.
+- Normalizes the current station's `Market.json` into the shared SQLite market
+  tables using provider `EliteJournal`.
 
 ### `backend/src/elite_logistics/database.py`
 
@@ -205,6 +219,7 @@ Shared interface elements:
 - Trade cards.
 - Transit cards.
 - Full-screen/second-screen flight board.
+- Left-side live/manual route progress rail.
 - Location autocomplete.
 - Shared search fields.
 - Confidence and metric components.
@@ -260,7 +275,7 @@ Single global visual system:
 ## Data flow
 
 ```text
-Manual planning state
+Manual planning state ◄──── optional Elite game-file state
         │
         ▼
 React search form
@@ -339,6 +354,6 @@ npm --prefix frontend run build
 
 At the time this context was created:
 
-- Backend: 8 tests passing.
-- Frontend: 5 tests passing.
+- Backend: 10 tests passing.
+- Frontend: 7 tests passing.
 - Production frontend build passing.

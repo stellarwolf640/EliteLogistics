@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Boxes,
+  Cable,
   Database,
   Gauge,
   PackageSearch,
@@ -24,7 +25,7 @@ import {
   formatCredits,
   formatTime,
 } from "./components";
-import type { ImmersiveTradeRoute, JobResponse, RoundTrip, SearchDraft, ShipProfile, TradeLeg, TransitResult, TransitSummary } from "./types";
+import type { EliteStatus, ImmersiveTradeRoute, JobResponse, RoundTrip, SearchDraft, ShipProfile, TradeLeg, TransitResult, TransitSummary } from "./types";
 import { useSearchDraft } from "./useSearchDraft";
 import { optimizeShip, SHIP_CATALOG, type OptimizationMode } from "./shipCatalog";
 
@@ -47,6 +48,32 @@ export default function App() {
   const { draft, setDraft } = useSearchDraft();
   const update = (patch: Partial<SearchDraft>) => setDraft((current) => ({ ...current, ...patch }));
   const status = useQuery({ queryKey: ["data-status"], queryFn: api.dataStatus });
+  const elite = useQuery({
+    queryKey: ["elite-status"],
+    queryFn: api.eliteStatus,
+    refetchInterval: (query) => query.state.data?.enabled ? 1500 : 10000,
+  });
+  useEffect(() => {
+    const connection = elite.data;
+    const state = connection?.state;
+    if (!connection?.enabled || !connection.auto_apply_planning_state || !state?.available || !state.system_id64) return;
+    setDraft((current) => {
+      const location = state.docked && state.station_name
+        ? `${state.station_name}, ${state.system_name}`
+        : state.system_name ?? current.originLocationLabel;
+      const next = {
+        ...current,
+        originSystemId64: String(state.system_id64),
+        originStationMarketId: state.docked && state.station_market_id ? String(state.station_market_id) : "",
+        originLocationLabel: location,
+        cargoCapacity: state.cargo_capacity || current.cargoCapacity,
+        ladenJumpRange: state.max_jump_range || current.ladenJumpRange,
+        credits: state.credits ?? current.credits,
+        rebuyReserve: state.rebuy ?? current.rebuyReserve,
+      };
+      return JSON.stringify(next) === JSON.stringify(current) ? current : next;
+    });
+  }, [elite.data, setDraft]);
   if (path === "/flight-board") {
     try {
       const payload = JSON.parse(localStorage.getItem("elite-logistics-flight-board") ?? "null");
@@ -59,8 +86,8 @@ export default function App() {
   return (
     <div className="app-shell">
       <main>
-        <ConsoleHeader path={path} observations={status.data?.market_observations ?? 0} />
-        {path === "/" && <Dashboard status={status.data} draft={draft} />}
+        <ConsoleHeader path={path} observations={status.data?.market_observations ?? 0} elite={elite.data} />
+        {path === "/" && <Dashboard status={status.data} draft={draft} elite={elite.data} />}
         {path === "/operations" && <OperationsMenu />}
         {path === "/trade" && <TradePage draft={draft} update={update} />}
         {path === "/round-trips" && <RoundTripPage draft={draft} update={update} />}
@@ -77,7 +104,7 @@ export default function App() {
   );
 }
 
-function ConsoleHeader({ path, observations }: { path: string; observations: number }) {
+function ConsoleHeader({ path, observations, elite }: { path: string; observations: number; elite?: EliteStatus }) {
   const trail = routeLabels[path] ?? ["HOME"];
   return (
     <header className="console-header">
@@ -87,7 +114,10 @@ function ConsoleHeader({ path, observations }: { path: string; observations: num
       <div className="breadcrumb">
         {trail.map((label, index) => <span key={label} className={index === trail.length - 1 ? "active" : ""}>{label}</span>)}
       </div>
-      <div className="console-status"><span className={observations ? "online" : ""} /><div><b>MARKET LINK</b><small>{observations.toLocaleString()} RECORDS</small></div></div>
+      <div className="header-links">
+        <div className="console-status"><span className={observations ? "online" : ""} /><div><b>MARKET LINK</b><small>{observations.toLocaleString()} RECORDS</small></div></div>
+        <div className="console-status"><span className={elite?.enabled && elite.state.game_running ? "online" : elite?.enabled && elite.state.available ? "standby" : ""} /><div><b>GAME LINK</b><small>{elite?.enabled ? elite.state.game_running ? "LIVE" : elite.state.available ? "REFERENCE" : "NO SIGNAL" : "DISABLED"}</small></div></div>
+      </div>
     </header>
   );
 }
@@ -126,14 +156,14 @@ function PageHeader({ eyebrow, title, body }: { eyebrow: string; title: string; 
   );
 }
 
-function Dashboard({ status, draft }: { status?: Awaited<ReturnType<typeof api.dataStatus>>; draft: SearchDraft }) {
+function Dashboard({ status, draft, elite }: { status?: Awaited<ReturnType<typeof api.dataStatus>>; draft: SearchDraft; elite?: EliteStatus }) {
   const navigate = useNavigate();
   const available = Math.max(0, draft.credits - draft.rebuyReserve - draft.cashReserve);
   return (
     <div className="page console-home">
       <section className="commander-strip">
-        <div><span>COMMANDER STATE</span><strong>{draft.originLocationLabel || "LOCATION NOT SET"}</strong></div>
-        <div><span>ACTIVE VESSEL</span><strong>{draft.cargoCapacity} T CARGO · {draft.ladenJumpRange} LY</strong></div>
+        <div><span>{elite?.enabled && elite.state.commander ? `CMDR ${elite.state.commander}` : "COMMANDER STATE"}</span><strong>{draft.originLocationLabel || "LOCATION NOT SET"}</strong></div>
+        <div><span>ACTIVE VESSEL</span><strong>{elite?.enabled && elite.state.ship_name ? `${elite.state.ship_name} · ` : ""}{draft.cargoCapacity} T · {draft.ladenJumpRange.toFixed(1)} LY</strong></div>
         <div><span>AVAILABLE CAPITAL</span><strong>{formatCredits(available)}</strong></div>
         <div><span>DATA COVERAGE</span><strong>{status?.systems.toLocaleString() ?? 0} SYSTEMS</strong></div>
       </section>
@@ -459,6 +489,10 @@ function DataPage({ draft, update }: { draft: SearchDraft; update: (patch: Parti
   const [mode, setMode] = useState(() => localStorage.getItem("elite-logistics-data-mode") ?? "live");
   const [sectorRadius, setSectorRadius] = useState(100);
   const status = useQuery({ queryKey: ["data-status"], queryFn: api.dataStatus });
+  const elite = useQuery({ queryKey: ["elite-status"], queryFn: api.eliteStatus, refetchInterval: 2000 });
+  const [eliteDirectory, setEliteDirectory] = useState("");
+  const [eliteEnabled, setEliteEnabled] = useState(false);
+  const [eliteAutoApply, setEliteAutoApply] = useState(false);
   const packInfo = useQuery({ queryKey: ["pack-info"], queryFn: api.packInfo, staleTime: 60 * 60 * 1000 });
   const start = useMutation({
     mutationFn: (download: boolean) => api.startImport(download),
@@ -474,6 +508,17 @@ function DataPage({ draft, update }: { draft: SearchDraft; update: (patch: Parti
     mutationFn: () => api.cacheRegion({ ...draft, maxSystemDistanceLy: sectorRadius }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["data-status"] }),
   });
+  const saveElite = useMutation({
+    mutationFn: () => api.updateEliteSettings({
+      enabled: eliteEnabled,
+      journal_directory: eliteDirectory,
+      auto_apply_planning_state: eliteAutoApply,
+    }),
+    onSuccess: (result) => {
+      queryClient.setQueryData(["elite-status"], result);
+      queryClient.invalidateQueries({ queryKey: ["data-status"] });
+    },
+  });
   const chooseMode = (value: string) => {
     setMode(value);
     localStorage.setItem("elite-logistics-data-mode", value);
@@ -481,9 +526,43 @@ function DataPage({ draft, update }: { draft: SearchDraft; update: (patch: Parti
   useEffect(() => {
     if (job.data?.status === "complete") queryClient.invalidateQueries({ queryKey: ["data-status"] });
   }, [job.data?.status, queryClient]);
+  useEffect(() => {
+    if (!elite.data) return;
+    setEliteDirectory(elite.data.configured_directory);
+    setEliteEnabled(elite.data.enabled);
+    setEliteAutoApply(elite.data.auto_apply_planning_state);
+  }, [elite.data?.configured_directory, elite.data?.enabled, elite.data?.auto_apply_planning_state]);
   return (
     <div className="page narrow">
       <PageHeader eyebrow="Data / coverage" title="Know what your route knows." body="Prices are observations. Freshness and coverage are part of every recommendation." />
+      <section className="planner-panel elite-link-panel">
+        <div className="elite-link-heading">
+          <div><span className="eyebrow">Local telemetry / optional</span><h2>Elite Dangerous game link</h2></div>
+          <div className={`link-state ${elite.data?.state.game_running ? "live" : elite.data?.state.available ? "ready" : ""}`}><Cable size={18} /><span>{elite.data?.state.game_running ? "LIVE TELEMETRY" : elite.data?.state.available ? "DATA READY" : "NO JOURNAL"}</span></div>
+        </div>
+        <p className="muted">Read the journal and companion JSON files written by Elite. The game link can update your location, balance, ship limits, cargo, navigation target, and active route progress. Manual planning remains available at all times.</p>
+        <div className="form-grid two">
+          <label className="field"><span>Elite journal directory</span><input value={eliteDirectory} onChange={(event) => setEliteDirectory(event.target.value)} placeholder="C:\Users\...\Saved Games\Frontier Developments\Elite Dangerous" /></label>
+          <div className="elite-link-actions">
+            {elite.data?.reference_directory && <button className="secondary" onClick={() => setEliteDirectory(elite.data!.reference_directory!)}>Use copied reference data</button>}
+            <button className="primary" disabled={saveElite.isPending} onClick={() => saveElite.mutate()}>{saveElite.isPending ? <RefreshCw className="spin" size={17} /> : <Cable size={17} />} Save and test link</button>
+          </div>
+        </div>
+        <div className="toggle-row">
+          <label className="toggle"><input type="checkbox" checked={eliteEnabled} onChange={(event) => setEliteEnabled(event.target.checked)} /><span className="switch">●</span>Enable game-file integration</label>
+          <label className="toggle"><input type="checkbox" checked={eliteAutoApply} onChange={(event) => setEliteAutoApply(event.target.checked)} /><span className="switch">●</span>Use game state in planning forms</label>
+        </div>
+        {elite.data?.state.available && (
+          <div className="elite-readout">
+            <div><span>Commander</span><strong>{elite.data.state.commander ? `CMDR ${elite.data.state.commander}` : "Unknown"}</strong></div>
+            <div><span>Position</span><strong>{elite.data.state.station_name ? `${elite.data.state.station_name}, ` : ""}{elite.data.state.system_name ?? "Unknown"}</strong></div>
+            <div><span>Vessel</span><strong>{elite.data.state.ship_name || elite.data.state.ship_model || "Unknown"}</strong></div>
+            <div><span>Flight state</span><strong>{elite.data.state.phase.replaceAll("_", " ")}</strong></div>
+          </div>
+        )}
+        {elite.data?.state.warnings.map((warning) => <Notice key={warning} tone="warning">{warning}</Notice>)}
+        {saveElite.error && <Notice tone="warning">{saveElite.error.message}</Notice>}
+      </section>
       <div className="data-cards">
         <article><Database size={21} /><span>Systems</span><strong>{status.data?.systems.toLocaleString() ?? "—"}</strong></article>
         <article><PackageSearch size={21} /><span>Stations</span><strong>{status.data?.stations.toLocaleString() ?? "—"}</strong></article>

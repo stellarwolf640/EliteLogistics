@@ -1,5 +1,6 @@
 import type {
   DataStatus,
+  EliteStatus,
   JobResponse,
   ImmersiveTradeRouteResponse,
   LocationResult,
@@ -27,6 +28,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   dataStatus: () => request<DataStatus>("/api/data/status"),
+  eliteStatus: () => request<EliteStatus>("/api/elite/status"),
+  updateEliteSettings: (payload: { enabled: boolean; journal_directory: string; auto_apply_planning_state: boolean }) =>
+    request<EliteStatus>("/api/elite/settings", { method: "PUT", body: JSON.stringify(payload) }),
   packInfo: () => request<{ url: string; bytes: number; available: boolean; error?: string }>("/api/data/spansh-pack-info"),
   locations: (query: string) =>
     request<LocationResult[]>(`/api/locations/search?q=${encodeURIComponent(query)}&limit=12`),

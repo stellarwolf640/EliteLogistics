@@ -134,6 +134,72 @@ export interface JobResponse {
   error: string | null;
 }
 
+export interface EliteCargoItem {
+  commodity: string;
+  canonical_commodity: string;
+  count: number;
+  stolen: number;
+  mission_id: number | null;
+}
+
+export interface EliteTransaction {
+  kind: "buy" | "sell";
+  market_id: number;
+  commodity: string;
+  canonical_commodity: string;
+  quantity: number;
+  price: number;
+  timestamp: string | null;
+}
+
+export interface EliteLiveState {
+  directory: string;
+  available: boolean;
+  source_kind: "unavailable" | "journal" | "reference";
+  game_running: boolean;
+  latest_event_at: string | null;
+  journal_file: string | null;
+  commander: string | null;
+  credits: number | null;
+  system_id64: number | null;
+  system_name: string | null;
+  system_position: number[] | null;
+  station_market_id: number | null;
+  station_name: string | null;
+  station_type: string | null;
+  station_distance_ls: number | null;
+  largest_pad: "S" | "M" | "L" | null;
+  docked: boolean;
+  phase: string;
+  ship_model: string | null;
+  ship_name: string | null;
+  ship_ident: string | null;
+  ship_id: number | null;
+  cargo_capacity: number | null;
+  cargo_count: number;
+  max_jump_range: number | null;
+  rebuy: number | null;
+  cargo: EliteCargoItem[];
+  target_system_id64: number | null;
+  target_system_name: string | null;
+  target_station_name: string | null;
+  landing_pad: number | null;
+  nav_route: Array<{ system_id64: number; system_name: string; star_class: string | null; position: number[] | null }>;
+  status_flags: string[];
+  transactions: EliteTransaction[];
+  files: Record<string, boolean>;
+  warnings: string[];
+}
+
+export interface EliteStatus {
+  enabled: boolean;
+  auto_apply_planning_state: boolean;
+  configured_directory: string;
+  reference_directory: string | null;
+  market_records_updated: number;
+  state: EliteLiveState;
+}
+
 export interface SearchDraft {
   originSystemId64: string;
   originStationMarketId: string;

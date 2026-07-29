@@ -11,16 +11,24 @@
 - Ship profiles and role-based module loadouts
 - Elite-style hierarchical service console
 
-## v1.1 — Stabilization and route reliability
+## v1.1 — Game link and active route console
+
+- Elite journal, Status, Cargo, Market, and NavRoute adapters
+- Optional automatic location, balance, vessel, cargo, range, and rebuy state
+- Current station market import into the normalized local cache
+- Live system, station, flight-phase, navigation-target, cargo, and market-event tracking
+- Left-side route progress rail with live and manual guide modes
+- Assigned landing-pad and remaining plotted-jump readouts
+
+## v1.2 — Stabilization and route reliability
 
 - Progressive long-distance corridor discovery
-- Saved and resumable active routes
-- Route-leg completion tracking
+- Persisted and resumable active routes across application restarts
 - Better sorting, filtering, and no-route explanations
 - Data download pause, cancellation, cleanup, and coverage reporting
 - Performance improvements for large local datasets
 
-## v1.2 — Relocation intelligence
+## v1.3 — Relocation intelligence
 
 - Current-route versus target-route comparison
 - Opportunity cost and break-even calculations
@@ -28,7 +36,7 @@
 - Expected session earnings
 - Arrival-adjusted market risk
 
-## v1.3 — Trade Routes
+## v1.4 — Trade Routes
 
 - Local circuits, long-haul corridors, expeditions, and open-ended trucking
 - Desired duration, distance, stop count, and cargo variety
@@ -36,7 +44,7 @@
 - Shareable route files or codes
 - Wing cargo allocation and combined group progress
 
-## v1.4 — Data platform and EDDN
+## v1.5 — Data platform and EDDN
 
 - Continuous EDDN ingestion
 - Source reconciliation and freshness tracking
@@ -44,10 +52,9 @@
 - Storage budgets and retention controls
 - Coverage visualization and limited price history
 
-## v1.5 — Ships and optional game integration
+## v1.6 — Exact outfitting and deeper game integration
 
-- Elite journal, Status, Cargo, Market, and ModulesInfo adapters
-- Automatic location, balance, vessel, and cargo state
+- ModulesInfo and engineering adapters
 - Exact module statistics and engineering effects
 - Exportable outfitting plans
 

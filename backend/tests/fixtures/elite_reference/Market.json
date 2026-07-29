@@ -1,0 +1,1 @@
+{"timestamp":"2099-01-01T12:00:10Z","event":"Market","MarketID":502,"StationName":"Test Terminal","StationType":"Coriolis","StarSystem":"Destination Test","Items":[{"id":128049168,"Name":"Silver","Name_Localised":"Silver","Category":"$MARKET_category_metals;","Category_Localised":"Metals","BuyPrice":34800,"SellPrice":34200,"MeanPrice":33900,"Stock":5000,"Demand":8000}]}

@@ -1,0 +1,11 @@
+{"timestamp":"2099-01-01T12:00:00Z","event":"Fileheader","part":1,"language":"English\\UK","gameversion":"4.0"}
+{"timestamp":"2099-01-01T12:00:01Z","event":"Commander","Name":"Test Pilot"}
+{"timestamp":"2099-01-01T12:00:02Z","event":"LoadGame","Commander":"Test Pilot","Credits":25000000,"Ship":"type6","ShipID":7,"ShipName":"Wayfarer","ShipIdent":"TEST-6"}
+{"timestamp":"2099-01-01T12:00:03Z","event":"Loadout","Ship":"type6","ShipID":7,"ShipName":"Wayfarer","ShipIdent":"TEST-6","CargoCapacity":104,"MaxJumpRange":18.75,"Rebuy":650000}
+{"timestamp":"2099-01-01T12:00:04Z","event":"Location","Docked":false,"StarSystem":"Origin Test","SystemAddress":1001,"StarPos":[0.0,0.0,0.0]}
+{"timestamp":"2099-01-01T12:00:05Z","event":"MarketBuy","MarketID":501,"Type":"Silver","Count":64,"BuyPrice":30000,"TotalCost":1920000}
+{"timestamp":"2099-01-01T12:00:06Z","event":"FSDTarget","Name":"Destination Test","SystemAddress":1002,"StarClass":"K"}
+{"timestamp":"2099-01-01T12:00:07Z","event":"StartJump","JumpType":"Hyperspace","StarSystem":"Destination Test","SystemAddress":1002}
+{"timestamp":"2099-01-01T12:00:08Z","event":"FSDJump","StarSystem":"Destination Test","SystemAddress":1002,"StarPos":[12.0,4.0,2.0],"JumpDist":12.8}
+{"timestamp":"2099-01-01T12:00:09Z","event":"DockingGranted","StationName":"Test Terminal","MarketID":502,"StationType":"Coriolis","LandingPad":14}
+{"timestamp":"2099-01-01T12:00:10Z","event":"Docked","StationName":"Test Terminal","MarketID":502,"StationType":"Coriolis","StarSystem":"Destination Test","SystemAddress":1002,"DistFromStarLS":420.0,"LandingPads":{"Small":10,"Medium":10,"Large":5}}
