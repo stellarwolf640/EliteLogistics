@@ -12,7 +12,15 @@ manual step-by-step guide.
 
 ## Start
 
-Run `start.ps1` in PowerShell. The launcher prepares the local environment, builds the interface when needed, starts the app at `http://127.0.0.1:8765`, and opens it in your browser.
+Double-click **Elite Logistics** in the project folder, or run `start.ps1` in
+PowerShell. The launcher prepares the local environment when needed and opens
+Elite Logistics as a native Windows window. The local FastAPI service and
+web-based renderer remain internal implementation details; no browser or
+visible PowerShell window is required during normal use.
+
+The desktop shell uses the installed Microsoft Edge WebView2 runtime. Windows
+10 and 11 normally include it. A second launch focuses the existing Elite
+Logistics window instead of starting another local service.
 
 The first online search uses Spansh to cache the selected system and nearby market candidates. The Data page offers compact live lookup, regional sector caches, or the much larger full-galaxy pack. Full-pack downloads show size, speed, progress, and ETA.
 
@@ -33,6 +41,7 @@ positioning.
 - Backend: Python 3.12+, FastAPI, SQLAlchemy, Alembic, SQLite
 - Frontend: React, TypeScript, Vite, TanStack Query
 - `dev.ps1`: local development servers
+- `start.ps1 -SmokeTest`: short native-window launcher check
 - `python -m pytest backend/tests`: backend test suite
 - `npm --prefix frontend test`: frontend tests
 - `npm --prefix frontend run build`: production interface

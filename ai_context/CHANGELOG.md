@@ -4,6 +4,16 @@ This changelog records product and architectural changes that future agents need
 
 ## Unreleased
 
+- Added desktop-transition Phase 1: a native pywebview/Edge WebView2 application
+  shell around the existing React and FastAPI application.
+- Added a hidden in-process local service, stable desktop origin, persistent
+  WebView profile, single-instance focusing, health-checked startup, and clean
+  service shutdown.
+- Changed normal `start.ps1` launches to open the native application with no
+  browser or visible console.
+- Added native startup-error handling, dependency/build freshness checks, and a
+  full native-window launcher smoke test.
+- Replaced deprecated FastAPI startup hooks with an application lifespan.
 - Added `ai_context/` onboarding documentation.
 - Documented the local-only `referenceData/` Elite journal and snapshot set.
 - Ignored `referenceData/` so private commander and location data cannot be

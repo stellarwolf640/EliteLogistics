@@ -1,5 +1,31 @@
 # Elite Logistics Roadmap
 
+## Desktop application transition
+
+### Phase 1 — Native Windows shell (complete)
+
+- Native Edge WebView2 application window
+- Hidden in-process FastAPI service on localhost
+- Existing React interface reused without a rewrite
+- Single-instance behavior that focuses the open window
+- Persistent desktop browser profile
+- Clean service shutdown when the window closes
+- Console-free project launcher with native startup errors
+
+### Phase 2 — Desktop-owned state
+
+- Move essential draft and active-route persistence from browser local storage
+  into the local API/SQLite store
+- Add native window geometry and display preferences
+- Add application icon, executable metadata, and installer-ready assets
+
+### Phase 3 — Native window workflows
+
+- Dedicated second-screen flight-console window controlled by the desktop shell
+- Native file/folder pickers for imports and Elite journal selection
+- Native update and diagnostic surfaces
+- Packaged Windows executable and installer
+
 ## v1.0 — Local logistics foundation
 
 - One-way trades and round trips

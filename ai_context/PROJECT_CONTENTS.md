@@ -27,10 +27,22 @@ EliteLogistics/
 
 - Creates the FastAPI application.
 - Registers the API router.
-- Initializes the database.
+- Initializes the database through the FastAPI lifespan.
 - Serves `frontend/dist` in production-local mode.
 - Falls back to `index.html` for frontend routes.
-- Starts Uvicorn on `127.0.0.1:8765`.
+- Retains a browser-oriented Uvicorn entry point for development/legacy use.
+
+### `backend/src/elite_logistics/desktop.py`
+
+Native Windows host:
+
+- Enforces a single running desktop instance.
+- Starts FastAPI/Uvicorn in a background thread on `127.0.0.1:8766`.
+- Waits for `/api/health` before opening the interface.
+- Hosts the compiled React application in Edge WebView2 through pywebview.
+- Uses a persistent profile under `data/webview`.
+- Stops the local service when the native window closes.
+- Provides service-only and native-window smoke-test modes.
 
 ### `backend/src/elite_logistics/api.py`
 
@@ -185,6 +197,7 @@ ELITE_LOGISTICS_OPEN_BROWSER
 
 - `test_engine.py` covers trade math, reserves, confidence, round trips, immersive routes, and transit constraints.
 - `test_provider.py` covers dump parsing and newest-observation precedence.
+- `test_desktop.py` covers port selection, server URLs, and Windows single-instance behavior.
 - `fixtures/tiny_spansh.json` is the deterministic market fixture.
 
 ## Frontend
@@ -354,6 +367,7 @@ npm --prefix frontend run build
 
 At the time this context was created:
 
-- Backend: 11 tests passing.
+- Backend: 14 tests passing.
 - Frontend: 8 tests passing.
 - Production frontend build passing.
+- Native launcher and window smoke tests passing.

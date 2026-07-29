@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import webbrowser
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
@@ -28,13 +29,13 @@ class SpaStaticFiles(StaticFiles):
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Elite Logistics API", version="0.1.0")
-    app.include_router(router)
-
-    @app.on_event("startup")
-    def startup() -> None:
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
         init_database()
+        yield
 
+    app = FastAPI(title="Elite Logistics API", version="0.1.0", lifespan=lifespan)
+    app.include_router(router)
     frontend_dist = Path(__file__).resolve().parents[3] / "frontend" / "dist"
     if frontend_dist.exists():
         app.mount("/", SpaStaticFiles(directory=frontend_dist, html=True), name="frontend")

@@ -48,8 +48,12 @@ Trade Routes are intended to become the flagship feature. Unlike Best Trades, th
 - Missing or stale data must never be silently presented as current.
 - SQLite is the local current-state store.
 - Do not add cloud hosting, user accounts, or Docker as requirements for normal use.
-- Production-local mode remains one FastAPI process serving the compiled frontend and API.
-- `start.ps1` remains the normal Windows launch path.
+- Production-local mode is a native pywebview/Edge WebView2 window with an
+  in-process FastAPI service serving the compiled frontend and API.
+- The native desktop service uses stable localhost port `8766` by default so
+  the WebView profile retains the same origin between launches.
+- `start.ps1` remains the normal Windows launch path and must not expose a
+  browser or console during normal use.
 
 ## Current interface hierarchy
 
@@ -174,6 +178,12 @@ Normal launch:
 powershell -ExecutionPolicy Bypass -File .\start.ps1
 ```
 
+Native-window smoke test:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\start.ps1 -SmokeTest
+```
+
 Development launch:
 
 ```powershell
@@ -200,3 +210,7 @@ Development launch:
 - Ship module recommendations are not a full Coriolis/EDSY-grade outfitting simulator.
 - Trade Routes do not yet persist campaigns or synchronize group progress.
 - Price history is not retained in v1.
+- Browser local storage still owns some frontend drafts; moving essential state
+  into SQLite is desktop-transition Phase 2.
+- The second-screen pop-out still uses web window behavior; a shell-managed
+  native flight-console window is desktop-transition Phase 3.
