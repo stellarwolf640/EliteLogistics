@@ -13,6 +13,38 @@ export interface DataStatus {
   database_bytes: number;
 }
 
+export interface EliteCargoItem {
+  name: string;
+  count: number;
+  stolen: number;
+}
+
+export interface EliteGameState {
+  available: boolean;
+  journal_directory: string;
+  journal_file: string | null;
+  source_files: string[];
+  last_updated: string | null;
+  game_running: boolean;
+  commander: string | null;
+  system_id64: number | null;
+  system_name: string | null;
+  station_market_id: number | null;
+  station_name: string | null;
+  ship_type: string | null;
+  ship_internal_name: string | null;
+  ship_name: string | null;
+  ship_ident: string | null;
+  cargo_capacity: number | null;
+  cargo_count: number;
+  max_jump_range: number | null;
+  pad_size: "S" | "M" | "L" | null;
+  credits: number | null;
+  rebuy: number | null;
+  cargo: EliteCargoItem[];
+  warnings: string[];
+}
+
 export interface LocationResult {
   kind: "system" | "station";
   id: number;

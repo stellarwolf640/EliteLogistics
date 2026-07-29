@@ -10,6 +10,8 @@ Run `start.ps1` in PowerShell. The launcher prepares the local environment, buil
 
 The first online search uses Spansh to cache the selected system and nearby market candidates. The Data page offers compact live lookup, regional sector caches, or the much larger full-galaxy pack. Full-pack downloads show size, speed, progress, and ETA.
 
+The Data Network also detects the standard Elite Dangerous journal folder on Windows. It reads Journal, Status, Cargo, and Market snapshots locally and previews the current commander, location, vessel, cargo, balance, and rebuy. Manual planning state remains authoritative: detected values are copied into the planner only when you choose **Use detected state**. Set `ELITE_DANGEROUS_JOURNAL_DIR` to use a non-standard journal location.
+
 ## Development
 
 - Backend: Python 3.12+, FastAPI, SQLAlchemy, Alembic, SQLite

@@ -96,6 +96,17 @@ main { min-width: 0; }
 .commander-strip span, .commander-strip strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .commander-strip span { color: var(--muted); font: 500 .57rem "Barlow Condensed"; letter-spacing: .14em; }
 .commander-strip strong { color: var(--amber-hi); font: 600 .8rem "Barlow Condensed"; margin-top: .25rem; letter-spacing: .05em; }
+.elite-link { margin: 1.5rem 0; }
+.elite-link-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.elite-link-heading h2 { margin: .35rem 0 0; }
+.link-state { border: 1px solid var(--line); color: var(--muted); padding: .45rem .65rem; font: 600 .62rem "Barlow Condensed"; letter-spacing: .14em; white-space: nowrap; }
+.link-state.online { color: #7dffb2; border-color: rgba(125, 255, 178, .35); }
+.elite-state-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; margin: 1rem 0; background: var(--line); border: 1px solid var(--line); }
+.elite-state-grid > div { min-width: 0; padding: .85rem; background: #070808; }
+.elite-state-grid span, .elite-state-grid strong, .elite-state-grid small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.elite-state-grid span { color: var(--muted); font: 500 .58rem "Barlow Condensed"; letter-spacing: .12em; text-transform: uppercase; }
+.elite-state-grid strong { margin-top: .3rem; color: var(--amber-hi); font: 600 .82rem "Barlow Condensed"; }
+.elite-state-grid small { margin-top: .2rem; color: var(--muted); }
 .service-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 .submenu-grid { max-width: 1150px; }
 .service-tile {
@@ -310,6 +321,7 @@ main { min-width: 0; }
   .console-status { padding: 0 .8rem; }
   .page { padding: 2rem 1rem 4rem; }
   .commander-strip { grid-template-columns: 1fr 1fr; }
+  .elite-state-grid { grid-template-columns: 1fr 1fr; }
   .commander-strip > div:nth-child(2) { border-right: 0; }
   .commander-strip > div { border-bottom: 1px solid var(--line); }
   .service-grid, .data-mode-grid, .optimization-readout, .board-summary, .data-cards { grid-template-columns: 1fr; }

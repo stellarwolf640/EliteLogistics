@@ -458,7 +458,13 @@ function DataPage({ draft, update }: { draft: SearchDraft; update: (patch: Parti
   const [jobId, setJobId] = useState<string | null>(null);
   const [mode, setMode] = useState(() => localStorage.getItem("elite-logistics-data-mode") ?? "live");
   const [sectorRadius, setSectorRadius] = useState(100);
+  const [eliteApplied, setEliteApplied] = useState(false);
   const status = useQuery({ queryKey: ["data-status"], queryFn: api.dataStatus });
+  const elite = useQuery({
+    queryKey: ["elite-state"],
+    queryFn: api.eliteState,
+    refetchInterval: 5000,
+  });
   const packInfo = useQuery({ queryKey: ["pack-info"], queryFn: api.packInfo, staleTime: 60 * 60 * 1000 });
   const start = useMutation({
     mutationFn: (download: boolean) => api.startImport(download),
@@ -481,6 +487,31 @@ function DataPage({ draft, update }: { draft: SearchDraft; update: (patch: Parti
   useEffect(() => {
     if (job.data?.status === "complete") queryClient.invalidateQueries({ queryKey: ["data-status"] });
   }, [job.data?.status, queryClient]);
+  const applyEliteState = () => {
+    const detected = elite.data;
+    if (!detected?.available) return;
+    update({
+      ...(detected.system_id64 !== null ? { originSystemId64: String(detected.system_id64) } : {}),
+      ...(detected.station_market_id !== null
+        ? { originStationMarketId: String(detected.station_market_id) }
+        : { originStationMarketId: "" }),
+      ...(detected.system_name
+        ? {
+            originLocationLabel: detected.station_name
+              ? `${detected.station_name}, ${detected.system_name}`
+              : detected.system_name,
+          }
+        : {}),
+      ...(detected.cargo_capacity ? { cargoCapacity: detected.cargo_capacity } : {}),
+      ...(detected.max_jump_range
+        ? { ladenJumpRange: Math.round(detected.max_jump_range * 10) / 10 }
+        : {}),
+      ...(detected.pad_size ? { padSize: detected.pad_size } : {}),
+      ...(detected.credits !== null ? { credits: detected.credits } : {}),
+      ...(detected.rebuy !== null ? { rebuyReserve: detected.rebuy } : {}),
+    });
+    setEliteApplied(true);
+  };
   return (
     <div className="page narrow">
       <PageHeader eyebrow="Data / coverage" title="Know what your route knows." body="Prices are observations. Freshness and coverage are part of every recommendation." />
@@ -489,6 +520,42 @@ function DataPage({ draft, update }: { draft: SearchDraft; update: (patch: Parti
         <article><PackageSearch size={21} /><span>Stations</span><strong>{status.data?.stations.toLocaleString() ?? "—"}</strong></article>
         <article><Gauge size={21} /><span>Market prices</span><strong>{status.data?.market_observations.toLocaleString() ?? "—"}</strong></article>
       </div>
+      <section className="planner-panel elite-link">
+        <div className="elite-link-heading">
+          <div>
+            <span className="eyebrow">Optional local game adapter</span>
+            <h2>Elite Dangerous journal link</h2>
+          </div>
+          <span className={`link-state ${elite.data?.game_running ? "online" : ""}`}>
+            {elite.isLoading
+              ? "SCANNING"
+              : elite.data?.game_running
+                ? "GAME ACTIVE"
+                : elite.data?.available
+                  ? "FILES DETECTED"
+                  : "NOT DETECTED"}
+          </span>
+        </div>
+        <p className="muted">Read-only access to local Journal, Status, Cargo, and Market snapshots. Detected values never replace your manual planning state until you apply them.</p>
+        <div className="pack-path">{elite.data?.journal_directory ?? "Scanning default Saved Games location…"}</div>
+        {elite.data?.available && (
+          <>
+            <div className="elite-state-grid">
+              <div><span>Commander</span><strong>{elite.data.commander || "Unknown"}</strong></div>
+              <div><span>Location</span><strong>{elite.data.station_name ? `${elite.data.station_name}, ` : ""}{elite.data.system_name || "Unknown"}</strong></div>
+              <div><span>Vessel</span><strong>{elite.data.ship_name?.trim() || elite.data.ship_type?.trim() || "Unknown"}</strong><small>{elite.data.cargo_capacity ?? "—"} t · {elite.data.max_jump_range?.toFixed(1) ?? "—"} ly</small></div>
+              <div><span>Manifest</span><strong>{elite.data.cargo_count} t aboard</strong><small>{elite.data.cargo.map((item) => `${item.count} t ${item.name}`).join(" · ") || "Cargo hold empty"}</small></div>
+            </div>
+            <button className="primary" disabled={!elite.data.system_id64} onClick={applyEliteState}>
+              <RefreshCw size={17} /> Use detected state
+            </button>
+            {eliteApplied && <Notice>Detected location, vessel limits, balance, and rebuy reserve were copied into your editable planning state.</Notice>}
+            {elite.data.warnings.map((warning) => <Notice key={warning} tone="warning">{warning}</Notice>)}
+          </>
+        )}
+        {elite.data && !elite.data.available && <Notice tone="warning">{elite.data.warnings[0] ?? "Elite Dangerous files were not found."}</Notice>}
+        {elite.error && <Notice tone="warning">{elite.error.message}</Notice>}
+      </section>
       <section className="data-mode-grid">
         {[
           ["live", "Live lookup", "Smallest storage. Pull fresh markets as you search and keep a compact working cache."],

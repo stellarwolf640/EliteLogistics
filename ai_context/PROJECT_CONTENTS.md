@@ -41,6 +41,7 @@ Important endpoints:
 GET    /api/health
 GET    /api/data/status
 GET    /api/data/spansh-pack-info
+GET    /api/elite/state
 GET    /api/locations/search
 
 GET    /api/ship-profiles
@@ -102,6 +103,13 @@ Market-provider implementations and normalization.
 - `SpanshDumpProvider` streams local JSON/gzip records into normalized tables.
 - New provider work should normalize into the existing database models.
 
+### `backend/src/elite_logistics/elite_adapter.py`
+
+- Reads the latest Elite Dangerous journal session without modifying game files.
+- Reconciles location, station, vessel, cargo capacity, jump range, rebuy, and supported credit transactions.
+- Supplements journal state with `Cargo.json`, `Market.json`, and `Status.json`.
+- Keeps game-detected values advisory; the frontend requires an explicit action before copying them into manual planning state.
+
 ### `backend/src/elite_logistics/database.py`
 
 SQLAlchemy models and database configuration.
@@ -162,6 +170,7 @@ Important variables:
 ```text
 ELITE_LOGISTICS_DATA_DIR
 ELITE_LOGISTICS_DATABASE_URL
+ELITE_DANGEROUS_JOURNAL_DIR
 SPANSH_BASE_URL
 ELITE_LOGISTICS_OPEN_BROWSER
 ```
@@ -260,6 +269,9 @@ Single global visual system:
 
 ```text
 Manual planning state
+        ▲
+        │ explicit "Use detected state"
+Elite local-file adapter (optional/read-only)
         │
         ▼
 React search form
