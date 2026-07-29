@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConfidenceBadge, FlightBoard, LocationPicker, SearchFields, TradeCard } from "./components";
+import { ConsoleHeader } from "./App";
 import type { SearchDraft, TradeLeg } from "./types";
 import { defaultDraft } from "./useSearchDraft";
 import { optimizeShip, SHIP_CATALOG } from "./shipCatalog";
@@ -65,6 +66,17 @@ describe("route presentation", () => {
     expect(screen.getByText("Where are you?")).toBeInTheDocument();
     expect(screen.getByText("Look for routes within")).toBeInTheDocument();
     expect(screen.getByDisplayValue("75")).toBeInTheDocument();
+  });
+
+  it("uses breadcrumb hierarchy entries as navigation controls", () => {
+    window.history.pushState({}, "", "/trade");
+    window.scrollTo = vi.fn();
+    render(<ConsoleHeader path="/trade" observations={100} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "TRADE OPERATIONS" }));
+
+    expect(window.location.pathname).toBe("/operations");
+    expect(screen.getByRole("button", { name: "BEST TRADES" })).toBeDisabled();
   });
 
   it("keeps a location field empty when the operator clears it", () => {

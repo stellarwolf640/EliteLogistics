@@ -43,6 +43,20 @@ const routeLabels: Record<string, string[]> = {
   "/data": ["HOME", "DATA NETWORK"],
 };
 
+const breadcrumbTargets: Record<string, string> = {
+  HOME: "/",
+  "TRADE OPERATIONS": "/operations",
+  "BEST TRADES": "/trade",
+  "ROUND TRIPS": "/round-trips",
+  "TRADE ROUTES": "/trade-routes",
+  NAVIGATION: "/navigation",
+  "PROFITABLE TRANSIT": "/transit",
+  "FLEET MANAGEMENT": "/fleet",
+  "SHIP PROFILES": "/ships",
+  "SHIP OPTIMIZATIONS": "/ship-optimizations",
+  "DATA NETWORK": "/data",
+};
+
 export default function App() {
   const path = usePath();
   const { draft, setDraft } = useSearchDraft();
@@ -104,7 +118,7 @@ export default function App() {
   );
 }
 
-function ConsoleHeader({ path, observations, elite }: { path: string; observations: number; elite?: EliteStatus }) {
+export function ConsoleHeader({ path, observations, elite }: { path: string; observations: number; elite?: EliteStatus }) {
   const trail = routeLabels[path] ?? ["HOME"];
   return (
     <header className="console-header">
@@ -112,7 +126,10 @@ function ConsoleHeader({ path, observations, elite }: { path: string; observatio
         <Boxes size={24} /><div><strong>ELITE LOGISTICS</strong><span>INDEPENDENT PILOTS FEDERATION</span></div>
       </button>
       <div className="breadcrumb">
-        {trail.map((label, index) => <span key={label} className={index === trail.length - 1 ? "active" : ""}>{label}</span>)}
+        {trail.map((label, index) => {
+          const active = index === trail.length - 1;
+          return <button key={label} className={active ? "active" : ""} disabled={active} onClick={() => navigateTo(breadcrumbTargets[label] ?? "/")}>{label}</button>;
+        })}
       </div>
       <div className="header-links">
         <div className="console-status"><span className={observations ? "online" : ""} /><div><b>MARKET LINK</b><small>{observations.toLocaleString()} RECORDS</small></div></div>
@@ -154,6 +171,15 @@ function PageHeader({ eyebrow, title, body }: { eyebrow: string; title: string; 
       <p>{body}</p>
     </div>
   );
+}
+
+function SearchDataNotice({ assumptions }: { assumptions?: string[] }) {
+  const message = [...(assumptions ?? [])].reverse().find((item) =>
+    /Refreshed|local data pack|Live Spansh/i.test(item)
+  );
+  if (!message) return null;
+  const warning = /unavailable|current cache|could not/i.test(message);
+  return <Notice tone={warning ? "warning" : "info"}>{message}</Notice>;
 }
 
 function Dashboard({ status, draft, elite }: { status?: Awaited<ReturnType<typeof api.dataStatus>>; draft: SearchDraft; elite?: EliteStatus }) {
@@ -235,7 +261,8 @@ function TradePage({ draft, update }: { draft: SearchDraft; update: (patch: Part
           {search.isPending ? "Calculating…" : "Find trades"}
         </button>
       </section>
-      {search.error && <Notice tone="warning">{search.error.message}</Notice>}
+        {search.error && <Notice tone="warning">{search.error.message}</Notice>}
+        <SearchDataNotice assumptions={search.data?.assumptions} />
       <section className="results">
         {search.data && <div className="results-heading"><h2>{search.data.routes.length} practical routes</h2><span>{formatCredits(search.data.available_credits)} available to trade</span></div>}
         {search.data?.routes.map((leg) => <TradeCard key={`${leg.source_market_id}-${leg.destination_market_id}-${leg.commodity_id}`} leg={leg} onTransit={tradeTo} onOpen={setBoard} />)}
@@ -260,7 +287,8 @@ function RoundTripPage({ draft, update }: { draft: SearchDraft; update: (patch: 
           {search.isPending ? "Calculating…" : "Find round trips"}
         </button>
       </section>
-      {search.error && <Notice tone="warning">{search.error.message}</Notice>}
+        {search.error && <Notice tone="warning">{search.error.message}</Notice>}
+        <SearchDataNotice assumptions={search.data?.assumptions} />
       <section className="results">
         {search.data && <div className="results-heading"><h2>{search.data.routes.length} closed loops</h2><span>Ranked by estimated CR/hour</span></div>}
         {search.data?.routes.map((route, index) => (
@@ -298,7 +326,8 @@ function TradeRoutesPage({ draft, update }: { draft: SearchDraft; update: (patch
           {search.isPending ? "Building cargo circuit…" : "Generate trade routes"}
         </button>
       </section>
-      {search.error && <Notice tone="warning">{search.error.message}</Notice>}
+        {search.error && <Notice tone="warning">{search.error.message}</Notice>}
+        <SearchDataNotice assumptions={search.data?.assumptions} />
       <section className="immersive-routes">
         {search.data?.routes.map((route, index) => (
           <article className="route-mission" key={`${route.name}-${index}`}>

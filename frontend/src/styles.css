@@ -72,9 +72,10 @@ main { min-width: 0; }
 .console-brand strong { color: var(--amber-hi); font: 700 1.15rem "Barlow Condensed"; letter-spacing: .1em; }
 .console-brand span { color: var(--muted); font: 500 .58rem "Barlow Condensed"; letter-spacing: .12em; margin-top: .15rem; }
 .breadcrumb { display: flex; align-items: center; overflow: hidden; height: 100%; padding: 0 1.5rem; }
-.breadcrumb span { color: #766657; font: 600 .7rem "Barlow Condensed"; letter-spacing: .12em; white-space: nowrap; }
-.breadcrumb span + span::before { content: "/"; color: #51341f; margin: 0 .75rem; }
-.breadcrumb span.active { color: var(--amber-hi); text-shadow: 0 0 10px #ff710066; }
+.breadcrumb button { border: 0; background: transparent; padding: .45rem .1rem; color: #8d7967; font: 600 .7rem "Barlow Condensed"; letter-spacing: .12em; white-space: nowrap; cursor: pointer; }
+.breadcrumb button + button::before { content: "/"; color: #51341f; margin: 0 .75rem; }
+.breadcrumb button:hover:not(:disabled), .breadcrumb button:focus-visible { color: var(--amber); outline: none; text-shadow: 0 0 10px #ff710066; }
+.breadcrumb button.active { color: var(--amber-hi); text-shadow: 0 0 10px #ff710066; cursor: default; }
 .console-status { height: 100%; display: flex; justify-content: flex-end; align-items: center; gap: .65rem; padding: 0 1.5rem; border-left: 1px solid var(--line); }
 .header-links { height: 100%; display: grid; grid-template-columns: 1fr 1fr; }
 .header-links .console-status { padding: 0 .8rem; }

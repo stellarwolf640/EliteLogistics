@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     JSON,
@@ -17,6 +17,7 @@ from sqlalchemy import (
     UniqueConstraint,
     create_engine,
     event,
+    update,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
 
@@ -173,6 +174,24 @@ SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 def init_database() -> None:
     Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        recover_interrupted_jobs(session)
+
+
+def recover_interrupted_jobs(session: Session) -> int:
+    """Jobs use daemon threads, so queued/running rows cannot survive a restart."""
+    now = datetime.now(UTC)
+    result = session.execute(
+        update(Job)
+        .where(Job.status.in_(("queued", "running")))
+        .values(
+            status="failed",
+            error="Interrupted when Elite Logistics last stopped. Start the operation again.",
+            updated_at=now,
+        )
+    )
+    session.commit()
+    return int(result.rowcount or 0)
 
 
 def get_session() -> Iterator[Session]:

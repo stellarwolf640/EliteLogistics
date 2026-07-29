@@ -21,6 +21,10 @@ This changelog records product and architectural changes that future agents need
   backend and 7 frontend tests.
 - Updated `start.ps1` to rebuild the interface when pulled source files are
   newer than the existing compiled frontend.
+- Fixed interrupted import jobs remaining marked as active after an application
+  restart and blocking later Spansh hydration.
+- Added visible online-refresh/cache-fallback notices to trade searches.
+- Made non-current breadcrumb hierarchy segments clickable.
 
 ## v1.1 — 2026-07-28
 

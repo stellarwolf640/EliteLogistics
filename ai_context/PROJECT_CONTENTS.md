@@ -354,6 +354,6 @@ npm --prefix frontend run build
 
 At the time this context was created:
 
-- Backend: 10 tests passing.
-- Frontend: 7 tests passing.
+- Backend: 11 tests passing.
+- Frontend: 8 tests passing.
 - Production frontend build passing.
