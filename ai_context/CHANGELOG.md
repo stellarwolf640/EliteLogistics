@@ -19,6 +19,8 @@ This changelog records product and architectural changes that future agents need
 - Added manual Previous/Advance route-guide controls when live data is absent.
 - Added sanitized Elite file fixtures and raised the validation baseline to 10
   backend and 7 frontend tests.
+- Updated `start.ps1` to rebuild the interface when pulled source files are
+  newer than the existing compiled frontend.
 
 ## v1.1 — 2026-07-28
 

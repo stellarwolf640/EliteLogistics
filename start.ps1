@@ -22,7 +22,20 @@ if (-not (Test-Path -LiteralPath "$projectRoot\frontend\node_modules")) {
     npm --prefix "$projectRoot\frontend" install
 }
 
-if (-not (Test-Path -LiteralPath $frontendDist)) {
+$frontendBuildRequired = -not (Test-Path -LiteralPath $frontendDist)
+if (-not $frontendBuildRequired) {
+    $compiledAt = (Get-Item -LiteralPath $frontendDist).LastWriteTimeUtc
+    $frontendInputs = @(
+        Get-ChildItem -LiteralPath "$projectRoot\frontend\src" -Recurse -File
+        Get-Item -LiteralPath "$projectRoot\frontend\package.json"
+        Get-Item -LiteralPath "$projectRoot\frontend\package-lock.json" -ErrorAction SilentlyContinue
+        Get-Item -LiteralPath "$projectRoot\frontend\vite.config.ts" -ErrorAction SilentlyContinue
+        Get-Item -LiteralPath "$projectRoot\frontend\tsconfig.app.json" -ErrorAction SilentlyContinue
+    ) | Where-Object { $_ }
+    $frontendBuildRequired = $null -ne ($frontendInputs | Where-Object { $_.LastWriteTimeUtc -gt $compiledAt } | Select-Object -First 1)
+}
+
+if ($frontendBuildRequired) {
     npm --prefix "$projectRoot\frontend" run build
 }
 
