@@ -9,6 +9,7 @@ from pathlib import Path
 class Settings:
     data_dir: Path
     database_url: str
+    elite_journal_dir: Path
     spansh_base_url: str = "https://www.spansh.co.uk/api"
     request_timeout_seconds: float = 12.0
     remote_concurrency: int = 6
@@ -24,6 +25,12 @@ def get_settings() -> Settings:
     return Settings(
         data_dir=data_dir,
         database_url=database_url,
+        elite_journal_dir=Path(
+            os.getenv(
+                "ELITE_DANGEROUS_JOURNAL_DIR",
+                Path.home() / "Saved Games" / "Frontier Developments" / "Elite Dangerous",
+            )
+        ).resolve(),
         spansh_base_url=os.getenv("SPANSH_BASE_URL", "https://www.spansh.co.uk/api").rstrip("/"),
     )
 

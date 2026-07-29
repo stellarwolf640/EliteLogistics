@@ -179,3 +179,35 @@ class LocationResult(BaseModel):
     system_id64: int
     system_name: str
     subtitle: str
+
+
+class EliteCargoItem(BaseModel):
+    name: str
+    count: int = Field(ge=0)
+    stolen: int = Field(default=0, ge=0)
+
+
+class EliteGameState(BaseModel):
+    available: bool
+    journal_directory: str
+    journal_file: str | None = None
+    source_files: list[str] = Field(default_factory=list)
+    last_updated: datetime | None = None
+    game_running: bool = False
+    commander: str | None = None
+    system_id64: int | None = None
+    system_name: str | None = None
+    station_market_id: int | None = None
+    station_name: str | None = None
+    ship_type: str | None = None
+    ship_internal_name: str | None = None
+    ship_name: str | None = None
+    ship_ident: str | None = None
+    cargo_capacity: int | None = None
+    cargo_count: int = Field(default=0, ge=0)
+    max_jump_range: float | None = None
+    pad_size: PadSize | None = None
+    credits: int | None = Field(default=None, ge=0)
+    rebuy: int | None = Field(default=None, ge=0)
+    cargo: list[EliteCargoItem] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)

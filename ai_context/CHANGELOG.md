@@ -5,6 +5,8 @@ This changelog records product and architectural changes that future agents need
 ## Unreleased
 
 - Added `ai_context/` onboarding documentation.
+- Added an optional, read-only Elite Dangerous local-file adapter for Journal, Status, Cargo, and Market snapshots.
+- Added a Data Network preview and explicit action for copying detected location, vessel limits, balance, and rebuy into editable manual planning state.
 
 ## v1.1 — 2026-07-28
 

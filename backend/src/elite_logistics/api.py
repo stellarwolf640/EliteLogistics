@@ -22,9 +22,11 @@ from .database import (
     get_session,
 )
 from .engine import find_immersive_trade_routes, find_round_trips, find_trades
+from .elite_adapter import read_elite_state
 from .jobs import start_import_job, start_transit_job
 from .providers import SpanshRemoteProvider
 from .schemas import (
+    EliteGameState,
     LocationResult,
     ImmersiveTradeRouteResponse,
     RoundTripResponse,
@@ -54,6 +56,12 @@ DEFAULT_PREFERENCES = {
 @router.get("/health")
 def health() -> dict:
     return {"status": "ok", "version": "0.1.0"}
+
+
+@router.get("/elite/state", response_model=EliteGameState)
+def elite_state() -> EliteGameState:
+    settings = get_settings()
+    return read_elite_state(settings.elite_journal_dir)
 
 
 @router.get("/data/status")

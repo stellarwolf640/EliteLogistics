@@ -1,5 +1,6 @@
 import type {
   DataStatus,
+  EliteGameState,
   JobResponse,
   ImmersiveTradeRouteResponse,
   LocationResult,
@@ -27,6 +28,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   dataStatus: () => request<DataStatus>("/api/data/status"),
+  eliteState: () => request<EliteGameState>("/api/elite/state"),
   packInfo: () => request<{ url: string; bytes: number; available: boolean; error?: string }>("/api/data/spansh-pack-info"),
   locations: (query: string) =>
     request<LocationResult[]>(`/api/locations/search?q=${encodeURIComponent(query)}&limit=12`),

@@ -46,7 +46,7 @@
 
 ## v1.5 — Ships and optional game integration
 
-- Elite journal, Status, Cargo, Market, and ModulesInfo adapters
+- Elite journal, Status, Cargo, and Market read-only state adapter foundation complete; ModulesInfo and deeper synchronization remain
 - Automatic location, balance, vessel, and cargo state
 - Exact module statistics and engineering effects
 - Exportable outfitting plans
