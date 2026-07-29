@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Boxes,
   Cable,
   Database,
   Gauge,
@@ -123,7 +122,8 @@ export function ConsoleHeader({ path, observations, elite }: { path: string; obs
   return (
     <header className="console-header">
       <button className="console-brand" onClick={() => navigateTo("/")}>
-        <Boxes size={24} /><div><strong>ELITE LOGISTICS</strong><span>INDEPENDENT PILOTS FEDERATION</span></div>
+        <span className="ion-monogram">ION</span>
+        <div><strong>INTRASTELLAR OPERATIONS NETWORK</strong><span>PROVIDED BY INTRASTELLAR LOGISTICS · ISL</span></div>
       </button>
       <div className="breadcrumb">
         {trail.map((label, index) => {
@@ -187,13 +187,16 @@ function Dashboard({ status, draft, elite }: { status?: Awaited<ReturnType<typeo
   const available = Math.max(0, draft.credits - draft.rebuyReserve - draft.cashReserve);
   return (
     <div className="page console-home">
+      <section className="brand-masthead" aria-label="ION — IntraStellar Operations Network">
+        <img src="/branding/ion-logo.png" alt="ION — IntraStellar Operations Network, provided by IntraStellar Logistics" />
+      </section>
       <section className="commander-strip">
         <div><span>{elite?.enabled && elite.state.commander ? `CMDR ${elite.state.commander}` : "COMMANDER STATE"}</span><strong>{draft.originLocationLabel || "LOCATION NOT SET"}</strong></div>
         <div><span>ACTIVE VESSEL</span><strong>{elite?.enabled && elite.state.ship_name ? `${elite.state.ship_name} · ` : ""}{draft.cargoCapacity} T · {draft.ladenJumpRange.toFixed(1)} LY</strong></div>
         <div><span>AVAILABLE CAPITAL</span><strong>{formatCredits(available)}</strong></div>
         <div><span>DATA COVERAGE</span><strong>{status?.systems.toLocaleString() ?? 0} SYSTEMS</strong></div>
       </section>
-      <div className="console-intro"><span>STARPORT SERVICES</span><h1>SELECT A SERVICE</h1><p>Independent logistics, navigation, fleet outfitting, and market intelligence.</p></div>
+      <div className="console-intro"><span>ION OPERATIONS SERVICES</span><h1>SELECT A SERVICE</h1><p>Commander logistics, navigation, fleet outfitting, and market intelligence provided by IntraStellar Logistics.</p></div>
       <section className="service-grid">
         <ServiceTile index="01" icon={Truck} title="Trade Operations" body="Commodity trades, closed loops, and immersive multi-stop cargo contracts." meta="3 SERVICES" onClick={() => navigate("/operations")} featured />
         <ServiceTile index="02" icon={Route} title="Navigation" body="Plan direct and profitable travel across populated space." meta="1 SERVICE" onClick={() => navigate("/navigation")} />

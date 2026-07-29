@@ -1,6 +1,13 @@
-# Elite Logistics
+# ION — IntraStellar Operations Network
 
-Elite Logistics is a Windows-friendly local companion for Elite Dangerous cargo operations. It includes one-way trades, round trips, immersion-oriented multi-stop Trade Routes, profitable transit, full-screen flight manifests, ship profiles, and ship optimization planning.
+ION is a Windows-first operations companion for Elite Dangerous, offered and
+produced by **IntraStellar Logistics (ISL)**. It turns commander state, market
+intelligence, navigation data, and future organizational objectives into
+practical routes, alerts, assignments, and operational guidance.
+
+The current release includes one-way trades, round trips, immersion-oriented
+multi-stop Trade Routes, profitable transit, full-screen flight manifests,
+ship profiles, and ship optimization planning.
 
 The interface follows an Elite-style service hierarchy: begin at the home console, enter Trade Operations, Navigation, Fleet Management, or the Data Network, then select the individual planning service. Ship optimization includes complete core, optional, utility, and hardpoint recommendations for Cargo, Range, Safety, and Balanced roles.
 
@@ -12,15 +19,15 @@ manual step-by-step guide.
 
 ## Start
 
-Double-click **Elite Logistics** in the project folder, or run `start.ps1` in
+Double-click **ION** in the project folder, or run `start.ps1` in
 PowerShell. The launcher prepares the local environment when needed and opens
-Elite Logistics as a native Windows window. The local FastAPI service and
+ION as a native Windows window. The local FastAPI service and
 web-based renderer remain internal implementation details; no browser or
 visible PowerShell window is required during normal use.
 
 The desktop shell uses the installed Microsoft Edge WebView2 runtime. Windows
-10 and 11 normally include it. A second launch focuses the existing Elite
-Logistics window instead of starting another local service.
+10 and 11 normally include it. A second launch focuses the existing ION window
+instead of starting another local service.
 
 The first online search uses Spansh to cache the selected system and nearby market candidates. The Data page offers compact live lookup, regional sector caches, or the much larger full-galaxy pack. Full-pack downloads show size, speed, progress, and ETA.
 

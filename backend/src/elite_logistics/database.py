@@ -186,7 +186,7 @@ def recover_interrupted_jobs(session: Session) -> int:
         .where(Job.status.in_(("queued", "running")))
         .values(
             status="failed",
-            error="Interrupted when Elite Logistics last stopped. Start the operation again.",
+            error="Interrupted when ION last stopped. Start the operation again.",
             updated_at=now,
         )
     )

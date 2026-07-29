@@ -13,7 +13,7 @@ trap {
         Add-Type -AssemblyName PresentationFramework
         [System.Windows.MessageBox]::Show(
             $_.Exception.Message,
-            "Elite Logistics - Startup Error",
+            "ION - Startup Error",
             [System.Windows.MessageBoxButton]::OK,
             [System.Windows.MessageBoxImage]::Error
         ) | Out-Null
@@ -92,7 +92,7 @@ if ($SmokeTest) {
         -Wait
 
     if ($desktopProcess.ExitCode -ne 0) {
-        throw "The native Elite Logistics window smoke test failed with exit code $($desktopProcess.ExitCode)."
+        throw "The native ION window smoke test failed with exit code $($desktopProcess.ExitCode)."
     }
 } else {
     Start-Process `

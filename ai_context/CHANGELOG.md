@@ -4,6 +4,15 @@ This changelog records product and architectural changes that future agents need
 
 ## Unreleased
 
+- Rebranded the user-facing application as **ION — IntraStellar Operations
+  Network**, offered and produced by **IntraStellar Logistics (ISL)**.
+- Added the approved ION orbital-network logo to the home operations console
+  and introduced a compact ION identity in persistent navigation.
+- Updated the native window, startup errors, document metadata, and project
+  documentation while retaining internal storage/package identifiers for
+  compatibility.
+- Made route-engine test observations relative to the test run so deterministic
+  fixtures do not expire as their original capture date ages.
 - Added desktop-transition Phase 1: a native pywebview/Edge WebView2 application
   shell around the existing React and FastAPI application.
 - Added a hidden in-process local service, stable desktop origin, persistent

@@ -56,7 +56,7 @@ main { min-width: 0; }
 .console-header {
   height: 76px;
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) minmax(300px, 2fr) minmax(210px, 1fr);
+  grid-template-columns: minmax(310px, 1.15fr) minmax(300px, 2fr) minmax(210px, 1fr);
   align-items: center;
   border-bottom: 1px solid var(--line-hi);
   background: #050606f2;
@@ -66,10 +66,10 @@ main { min-width: 0; }
   box-shadow: 0 7px 30px #000;
 }
 .console-header::after { content: ""; position: absolute; bottom: -4px; left: 0; width: 31%; height: 3px; background: var(--amber); box-shadow: 0 0 13px var(--amber); }
-.console-brand { height: 100%; display: flex; gap: .8rem; align-items: center; text-align: left; padding: 0 1.5rem; border: 0; border-right: 1px solid var(--line); background: linear-gradient(100deg, var(--amber-soft), transparent); cursor: pointer; }
-.console-brand svg { color: var(--amber); filter: drop-shadow(0 0 8px #ff710088); }
+.console-brand { height: 100%; display: flex; gap: .8rem; align-items: center; text-align: left; padding: 0 1.25rem; border: 0; border-right: 1px solid var(--line); background: linear-gradient(100deg, var(--amber-soft), transparent); cursor: pointer; }
+.ion-monogram { width: 54px; height: 42px; display: grid !important; place-items: center; flex: 0 0 auto; border: 1px solid var(--amber); color: #fff2e3 !important; background: #090806; clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); box-shadow: inset 0 -3px var(--amber), 0 0 14px #ff710033; font: 700 1.25rem "Barlow Condensed" !important; letter-spacing: .09em !important; margin: 0 !important; }
 .console-brand strong, .console-brand span { display: block; }
-.console-brand strong { color: var(--amber-hi); font: 700 1.15rem "Barlow Condensed"; letter-spacing: .1em; }
+.console-brand strong { color: var(--amber-hi); font: 700 .88rem "Barlow Condensed"; letter-spacing: .09em; white-space: nowrap; }
 .console-brand span { color: var(--muted); font: 500 .58rem "Barlow Condensed"; letter-spacing: .12em; margin-top: .15rem; }
 .breadcrumb { display: flex; align-items: center; overflow: hidden; height: 100%; padding: 0 1.5rem; }
 .breadcrumb button { border: 0; background: transparent; padding: .45rem .1rem; color: #8d7967; font: 600 .7rem "Barlow Condensed"; letter-spacing: .12em; white-space: nowrap; cursor: pointer; }
@@ -89,6 +89,8 @@ main { min-width: 0; }
 .page { width: min(1480px, 100%); margin: 0 auto; padding: clamp(2rem, 4vw, 4.5rem); }
 .page.narrow { width: min(1240px, 100%); }
 .page.wide { width: min(1600px, 100%); }
+.brand-masthead { max-width: 1080px; margin: -1rem auto 2.2rem; padding: clamp(.4rem, 1vw, .8rem); border-bottom: 1px solid var(--line); background: radial-gradient(ellipse at center, #20374718, transparent 67%); }
+.brand-masthead img { display: block; width: 100%; height: auto; mix-blend-mode: screen; }
 .page-header, .console-intro { max-width: 840px; margin-bottom: 2.2rem; border-left: 3px solid var(--amber); padding-left: 1.15rem; }
 .page-header h1, .console-intro h1 { margin: .25rem 0 .7rem; text-transform: uppercase; text-shadow: 0 0 22px #ff710020; }
 .page-header p, .console-intro p { color: var(--muted); line-height: 1.65; max-width: 700px; }
@@ -356,7 +358,7 @@ main { min-width: 0; }
 @media (max-width: 760px) {
   .console-header { height: 66px; }
   .console-brand { padding: 0 .8rem; }
-  .console-brand span { display: none; }
+  .console-brand div span { display: none; }
   .console-status { padding: 0 .8rem; }
   .page { padding: 2rem 1rem 4rem; }
   .commander-strip { grid-template-columns: 1fr 1fr; }

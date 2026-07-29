@@ -432,7 +432,7 @@ def import_spansh(payload: ImportRequest) -> dict:
     path = path.resolve()
     allowed_root = get_settings().data_dir.resolve()
     if allowed_root not in path.parents and path != allowed_root:
-        raise HTTPException(400, "Import file must be inside the Elite Logistics data directory")
+        raise HTTPException(400, "Import file must be inside the ION data directory")
     if not path.exists() and not payload.download:
         raise HTTPException(404, f"Data pack not found at {path}")
     return {"job_id": start_import_job(path, download=payload.download), "status": "queued"}

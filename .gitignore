@@ -9,6 +9,7 @@ frontend/dist/
 data/
 referenceData/
 /Elite Logistics.lnk
+/ION.lnk
 *.db
 *.part
 .vite/

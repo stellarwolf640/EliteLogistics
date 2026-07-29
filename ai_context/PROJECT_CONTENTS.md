@@ -1,15 +1,16 @@
-# Project Contents
+# ION Project Contents
 
 ## Repository overview
 
 ```text
-EliteLogistics/
+EliteLogistics/                    Repository name retained for compatibility
 ├── ai_context/                     AI-agent onboarding and history
 ├── backend/                        FastAPI application and route engine
 │   ├── migrations/                 Alembic migrations
 │   ├── src/elite_logistics/        Backend package
 │   └── tests/                      Deterministic backend tests and fixtures
 ├── frontend/                       React/TypeScript interface
+│   ├── public/branding/ion-logo.png Approved ION brand lockup
 │   ├── src/
 │   └── package.json
 ├── data/                           Local runtime data; ignored by Git
@@ -274,6 +275,7 @@ Single global visual system:
 - Module manifests.
 - Responsive layouts.
 - Full-screen flight board.
+- ION masthead and compact persistent-navigation identity.
 
 ### Frontend tests
 

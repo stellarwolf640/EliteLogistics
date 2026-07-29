@@ -1,6 +1,7 @@
 # AI Agent Onboarding
 
-This folder is the fast-start context for AI agents working on Elite Logistics. Read these files before changing code:
+This folder is the fast-start context for AI agents working on ION — the
+IntraStellar Operations Network. Read these files before changing code:
 
 1. `AI_README.md` — product intent, architectural rules, and working practices.
 2. `PROJECT_CONTENTS.md` — repository map, routes, APIs, data flow, and important files.
@@ -10,7 +11,11 @@ This folder is the fast-start context for AI agents working on Elite Logistics. 
 
 ## Product
 
-Elite Logistics is a Windows-first local companion for Elite Dangerous cargo operations. It should feel like an in-universe extension of the game rather than a generic trading website.
+ION is a Windows-first operations companion for Elite Dangerous, offered and
+produced by IntraStellar Logistics (ISL). It should feel like an in-universe
+extension of the game rather than a generic trading website. The repository and
+some internal package/storage identifiers retain the original `elite-logistics`
+name for compatibility; user-facing identity is ION.
 
 Its current capabilities are:
 

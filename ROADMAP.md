@@ -1,4 +1,6 @@
-# Elite Logistics Roadmap
+# ION — IntraStellar Operations Network Roadmap
+
+ION is offered and produced by IntraStellar Logistics (ISL).
 
 ## Desktop application transition
 

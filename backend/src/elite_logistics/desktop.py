@@ -16,7 +16,7 @@ from .config import get_settings
 from .main import create_app
 
 
-APP_TITLE = "Elite Logistics"
+APP_TITLE = "ION — IntraStellar Operations Network"
 MUTEX_NAME = "Local\\EliteLogisticsDesktop"
 ERROR_ALREADY_EXISTS = 183
 DEFAULT_DESKTOP_PORT = 8766
@@ -182,7 +182,7 @@ def run_desktop() -> int:
         return 0
     except Exception as exc:
         show_error_dialog(
-            f"Elite Logistics could not start.\n\n{exc}\n\n"
+            f"ION could not start.\n\n{exc}\n\n"
             "If this continues, run start.ps1 once from PowerShell to see installation details."
         )
         return 1
