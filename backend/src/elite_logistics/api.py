@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import os
 from pathlib import Path
 from typing import Literal
 
@@ -12,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .database import (
+    ActiveOperation,
     DataImport,
     Job,
     MarketObservation,
@@ -21,6 +23,7 @@ from .database import (
     System,
     get_session,
 )
+from .events import event_bus
 from .engine import find_immersive_trade_routes, find_round_trips, find_trades
 from .elite_data import EliteDataReader, default_journal_directory, sync_current_market
 from .jobs import start_import_job, start_transit_job
@@ -28,6 +31,8 @@ from .providers import SpanshRemoteProvider
 from .schemas import (
     LocationResult,
     EliteSettingsInput,
+    ActiveOperationInput,
+    ActiveOperationOutput,
     ImmersiveTradeRouteResponse,
     RoundTripResponse,
     ShipProfileInput,
@@ -35,30 +40,121 @@ from .schemas import (
     TradeSearchRequest,
     TradeSearchResponse,
     TransitRequest,
+    PreferencesPayload,
 )
+from .version import APP_VERSION
+from .updater import update_service
 
 router = APIRouter(prefix="/api")
-DEFAULT_PREFERENCES = {
-    "max_market_age_hours": 4,
-    "max_station_distance_ls": 2000,
-    "min_supply_multiplier": 2,
-    "min_demand_multiplier": 2,
-    "include_fleet_carriers": False,
-    "include_planetary": False,
-    "include_odyssey": False,
-    "include_permit_systems": False,
-    "include_restricted": False,
-    "hide_low_confidence": True,
-    "detour_limit": 0.2,
-    "elite_enabled": False,
-    "elite_journal_directory": "",
-    "elite_auto_apply_planning_state": False,
-}
+DEFAULT_PREFERENCES = PreferencesPayload().model_dump(mode="json")
+
+
+def _normalize_preferences(values: dict | None) -> PreferencesPayload:
+    values = values or {}
+    if values.get("schema_version") == 2:
+        try:
+            return PreferencesPayload.model_validate(values)
+        except ValueError:
+            return PreferencesPayload()
+    # One-time compatibility for source/development profiles. Frozen builds use
+    # a clean Local AppData profile and therefore never inspect repository data.
+    defaults = PreferencesPayload()
+    search = defaults.search_draft.model_dump()
+    for key in search:
+        if key in values:
+            search[key] = values[key]
+    return PreferencesPayload(
+        search_draft=search,
+        data_mode=values.get("data_mode", "live"),
+        elite_enabled=bool(values.get("elite_enabled", False)),
+        elite_journal_directory=str(values.get("elite_journal_directory", "")),
+        elite_auto_apply_planning_state=bool(
+            values.get("elite_auto_apply_planning_state", False)
+        ),
+    )
+
+
+def _load_preferences(session: Session) -> PreferencesPayload:
+    record = session.get(Preference, 1)
+    return _normalize_preferences(record.values if record else None)
+
+
+def _save_preferences(session: Session, preferences: PreferencesPayload) -> PreferencesPayload:
+    values = preferences.model_dump(mode="json")
+    record = session.get(Preference, 1)
+    if record is None:
+        session.add(Preference(id=1, schema_version=2, values=values))
+    else:
+        record.schema_version = 2
+        record.values = values
+    session.commit()
+    return preferences
 
 
 @router.get("/health")
 def health() -> dict:
-    return {"status": "ok", "version": "0.1.0"}
+    return {"status": "ok", "version": APP_VERSION}
+
+
+@router.get("/diagnostics")
+def diagnostics(session: Session = Depends(get_session)) -> dict:
+    settings = get_settings()
+    database_ok = True
+    try:
+        session.execute(select(1))
+    except Exception:
+        database_ok = False
+    log_file = settings.paths.logs / "ion.log"
+    recent_errors: list[str] = []
+    if log_file.exists():
+        try:
+            recent_errors = [
+                line.rstrip()
+                for line in log_file.read_text(encoding="utf-8", errors="replace").splitlines()
+                if "ERROR" in line or "CRITICAL" in line
+            ][-20:]
+        except OSError:
+            pass
+    return {
+        "version": APP_VERSION,
+        "packaged": settings.packaged,
+        "runtime_paths": {
+            "profile": str(settings.paths.root),
+            "database": str(settings.paths.database),
+            "cache": str(settings.paths.cache),
+            "downloads": str(settings.paths.downloads),
+            "logs": str(settings.paths.logs),
+            "updates": str(settings.paths.updates),
+            "webview": str(settings.paths.webview),
+        },
+        "database_ok": database_ok,
+        "webview2_available": (
+            os.getenv("ION_WEBVIEW2_AVAILABLE") == "1"
+            if "ION_WEBVIEW2_AVAILABLE" in os.environ
+            else None
+        ),
+        "game_link": elite_status(session),
+        "recent_errors": recent_errors,
+    }
+
+
+@router.get("/updates/status")
+def update_status() -> dict:
+    return update_service.status()
+
+
+@router.post("/updates/check")
+def check_for_updates() -> dict:
+    return update_service.check(force=True)
+
+
+@router.post("/updates/download", status_code=status.HTTP_202_ACCEPTED)
+def download_update() -> dict:
+    try:
+        update_service.begin_download()
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return update_service.status()
 
 
 @router.get("/data/status")
@@ -66,7 +162,7 @@ def data_status(session: Session = Depends(get_session)) -> dict:
     latest = session.scalar(select(func.max(MarketObservation.observed_at)))
     pack_path = get_settings().data_dir / "galaxy_stations.json.gz"
     partial_pack_path = pack_path.with_suffix(pack_path.suffix + ".part")
-    database_path = get_settings().data_dir / "elite-logistics.db"
+    database_path = get_settings().paths.database
     return {
         "systems": session.scalar(select(func.count()).select_from(System)) or 0,
         "stations": session.scalar(select(func.count()).select_from(Station)) or 0,
@@ -215,29 +311,64 @@ def delete_profile(profile_id: int, session: Session = Depends(get_session)) -> 
     return Response(status_code=204)
 
 
-@router.get("/preferences")
-def get_preferences(session: Session = Depends(get_session)) -> dict:
-    record = session.get(Preference, 1)
-    return record.values if record else DEFAULT_PREFERENCES
+@router.get("/preferences", response_model=PreferencesPayload)
+def get_preferences(session: Session = Depends(get_session)) -> PreferencesPayload:
+    return _load_preferences(session)
 
 
-@router.put("/preferences")
-def put_preferences(values: dict, session: Session = Depends(get_session)) -> dict:
-    merged = {**DEFAULT_PREFERENCES, **values}
-    record = session.get(Preference, 1)
+@router.put("/preferences", response_model=PreferencesPayload)
+def put_preferences(
+    values: PreferencesPayload, session: Session = Depends(get_session)
+) -> PreferencesPayload:
+    return _save_preferences(session, values)
+
+
+@router.get("/operations/active", response_model=ActiveOperationOutput | None)
+def get_active_operation(
+    session: Session = Depends(get_session),
+) -> ActiveOperationOutput | None:
+    record = session.get(ActiveOperation, 1)
+    return ActiveOperationOutput.model_validate(record, from_attributes=True) if record else None
+
+
+@router.put("/operations/active", response_model=ActiveOperationOutput)
+def put_active_operation(
+    payload: ActiveOperationInput, session: Session = Depends(get_session)
+) -> ActiveOperationOutput:
+    now = datetime.now(UTC)
+    record = session.get(ActiveOperation, 1)
+    values = payload.model_dump()
     if record is None:
-        record = Preference(id=1, schema_version=1, values=merged)
+        record = ActiveOperation(id=1, updated_at=now, **values)
         session.add(record)
     else:
-        record.values = merged
+        for key, value in values.items():
+            setattr(record, key, value)
+        record.updated_at = now
     session.commit()
-    return merged
+    session.refresh(record)
+    result = ActiveOperationOutput.model_validate(record, from_attributes=True)
+    event_bus.publish(
+        "operation.progressed" if payload.manual_progress else "operation.changed",
+        result.model_dump(mode="json"),
+    )
+    return result
+
+
+@router.delete("/operations/active", status_code=status.HTTP_204_NO_CONTENT)
+def delete_active_operation(session: Session = Depends(get_session)) -> Response:
+    record = session.get(ActiveOperation, 1)
+    if record:
+        session.delete(record)
+        session.commit()
+    event_bus.publish("operation.changed", None)
+    return Response(status_code=204)
 
 
 def _elite_settings(session: Session) -> tuple[dict, Path]:
-    record = session.get(Preference, 1)
-    values = {**DEFAULT_PREFERENCES, **(record.values if record else {})}
-    configured = str(values.get("elite_journal_directory") or "").strip()
+    preferences = _load_preferences(session)
+    values = preferences.model_dump()
+    configured = preferences.elite_journal_directory.strip()
     directory = Path(configured).expanduser().resolve() if configured else default_journal_directory()
     return values, directory
 
@@ -269,23 +400,15 @@ def elite_status(session: Session = Depends(get_session)) -> dict:
 
 @router.put("/elite/settings")
 def put_elite_settings(payload: EliteSettingsInput, session: Session = Depends(get_session)) -> dict:
-    record = session.get(Preference, 1)
-    current = {**DEFAULT_PREFERENCES, **(record.values if record else {})}
+    current = _load_preferences(session)
     directory = payload.journal_directory.strip()
     if payload.enabled and directory and not Path(directory).expanduser().is_dir():
         raise HTTPException(400, "The selected Elite journal directory does not exist.")
-    current.update(
-        {
-            "elite_enabled": payload.enabled,
-            "elite_journal_directory": directory,
-            "elite_auto_apply_planning_state": payload.auto_apply_planning_state,
-        }
-    )
-    if record is None:
-        session.add(Preference(id=1, schema_version=1, values=current))
-    else:
-        record.values = current
-    session.commit()
+    current.elite_enabled = payload.enabled
+    current.elite_journal_directory = directory
+    current.elite_auto_apply_planning_state = payload.auto_apply_planning_state
+    _save_preferences(session, current)
+    event_bus.publish("elite.connected" if payload.enabled else "elite.disconnected", {})
     return elite_status(session)
 
 

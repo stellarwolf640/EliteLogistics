@@ -2,7 +2,53 @@
 
 This changelog records product and architectural changes that future agents need to understand. It is not limited to public release notes.
 
-## Unreleased
+## 0.2.0 — 2026-07-29
+
+### Desktop-owned state
+
+- Moved search drafts and data mode from browser local storage into schema-v2
+  backend preferences.
+- Added close behavior, main/route window geometry, route fullscreen/topmost,
+  and update-check preferences.
+- Added the generic singleton `active_operations` record and active-operation API.
+- Active cargo manifests now persist before display and restore after restart.
+- Installed builds use a clean `%LOCALAPPDATA%\IntraStellar Logistics\ION`
+  profile with `ion.db`, cache, downloads, logs, updates, and webview folders.
+
+### Native workflows
+
+- Replaced the standard title bar with the custom ION frame.
+- Added native minimize, maximize/restore, close, folder selection, route
+  console, fullscreen, always-on-top, tray, and updater bridge actions.
+- Replaced the browser pop-out with one true secondary pywebview route window.
+- Added monitor-aware window-bound restoration and clamping.
+- Added complete-exit and minimize-to-tray behavior.
+- Added diagnostics for version, paths, SQLite, WebView2, game link, and errors.
+
+### Event transport
+
+- Added ordered `WS /api/events` envelopes, a bounded replay buffer, and snapshot fallback.
+- Added the background Elite-file monitor and typed location, cargo,
+  navigation, market, operation, job, and update events.
+- Removed repeated Elite and job polling from React.
+- Added one reconnecting frontend event client and authoritative REST snapshots.
+
+### Packaging and updates
+
+- Centralized version `0.2.0`.
+- Added Python 3.14/PyInstaller 6.21 one-folder packaging.
+- Added ION executable/tray/installer icon resources.
+- Added a current-user x64 Inno Setup installer, shortcuts, Add/Remove Programs
+  entry, profile preservation, and conditional WebView2 Evergreen installation.
+- Added signed stable GitHub Release update checks, release-note approval,
+  download progress, Ed25519 manifest verification, size/SHA-256 validation,
+  and silent upgrade handoff.
+- Added stable-tag-only GitHub Actions publishing and installed-application smoke tests.
+- Added 21 backend tests, 8 component tests, and 4 Playwright acceptance scenarios.
+- Locally validated source, frozen, native-window, install, installed-run,
+  uninstall, profile-preservation, and signed-manifest workflows.
+
+## Earlier unreleased work
 
 - Rebranded the user-facing application as **ION — IntraStellar Operations
   Network**, offered and produced by **IntraStellar Logistics (ISL)**.

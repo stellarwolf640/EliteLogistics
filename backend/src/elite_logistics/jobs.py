@@ -15,6 +15,7 @@ from .database import Job, SessionLocal
 from .providers import SpanshDumpProvider
 from .schemas import TransitRequest
 from .engine import plan_transit
+from .events import event_bus
 
 
 def create_job(kind: str) -> str:
@@ -23,6 +24,7 @@ def create_job(kind: str) -> str:
     with SessionLocal() as session:
         session.add(Job(id=job_id, kind=kind, status="queued", progress=0, created_at=now, updated_at=now))
         session.commit()
+    event_bus.publish("job.progressed", {"id": job_id, "kind": kind, "status": "queued", "progress": 0})
     return job_id
 
 
@@ -54,6 +56,10 @@ def update_job(job_id: str, progress: float, metadata: dict | None = None) -> No
             job.result = {**(job.result or {}), **metadata}
 
     _write_job(job_id, change)
+    event_bus.publish(
+        "job.progressed",
+        {"id": job_id, "status": "running", "progress": max(0, min(1, progress)), "metadata": metadata or {}},
+    )
 
 
 def _run(job_id: str, work: Callable[[], dict]) -> None:
@@ -61,6 +67,7 @@ def _run(job_id: str, work: Callable[[], dict]) -> None:
         job.status = "running"
 
     _write_job(job_id, mark_running)
+    event_bus.publish("job.progressed", {"id": job_id, "status": "running", "progress": 0})
     try:
         result = work()
         def mark_complete(job: Job) -> None:
@@ -69,6 +76,7 @@ def _run(job_id: str, work: Callable[[], dict]) -> None:
             job.result = result
 
         _write_job(job_id, mark_complete)
+        event_bus.publish("job.completed", {"id": job_id, "status": "complete", "progress": 1})
     except Exception as exc:
         def mark_failed(job: Job) -> None:
             job.status = "failed"
@@ -76,6 +84,7 @@ def _run(job_id: str, work: Callable[[], dict]) -> None:
 
         try:
             _write_job(job_id, mark_failed)
+            event_bus.publish("job.failed", {"id": job_id, "status": "failed", "error": str(exc)})
         except Exception:
             # The worker must not emit a second unhandled traceback if SQLite
             # itself is unavailable while recording the original failure.

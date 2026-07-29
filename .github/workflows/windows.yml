@@ -1,0 +1,126 @@
+name: Windows build and release
+
+on:
+  push:
+    branches: ["main", "codex/**"]
+    tags: ["v*.*.*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          architecture: "x64"
+          cache: "pip"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Verify version agreement
+        shell: pwsh
+        run: |
+          if ("${{ github.ref_type }}" -eq "tag") {
+            python scripts/check_versions.py "${{ github.ref_name }}"
+          } else {
+            python scripts/check_versions.py
+          }
+
+      - name: Install backend
+        run: python -m pip install -e "./backend[dev]"
+
+      - name: Test backend
+        working-directory: backend
+        run: pytest
+
+      - name: Test and build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm test
+          npm run build
+
+      - name: Install browser test runtime
+        working-directory: frontend
+        run: npx playwright install chromium
+
+      - name: End-to-end application tests
+        working-directory: frontend
+        run: npm run test:e2e
+
+      - name: Build icon and one-folder application
+        shell: pwsh
+        run: |
+          python scripts/create_icon.py
+          pyinstaller --clean --noconfirm --distpath dist --workpath build/pyinstaller backend/ion.spec
+
+      - name: Packaged service smoke test
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath "dist\ION\ION.exe" -ArgumentList "--smoke-test" -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Packaged smoke test failed: $($process.ExitCode)" }
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Compile installer
+        shell: pwsh
+        run: |
+          $version = python scripts/check_versions.py
+          $env:ION_VERSION = $version
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "installer\ION.iss"
+
+      - name: Installed application smoke test
+        shell: pwsh
+        run: |
+          $version = python scripts/check_versions.py
+          $setup = "dist\installer\ION-Setup-x64-$version.exe"
+          $install = Start-Process $setup -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Install failed: $($install.ExitCode)" }
+          $app = "$env:LOCALAPPDATA\Programs\IntraStellar Logistics\ION\ION.exe"
+          $smoke = Start-Process $app -ArgumentList "--smoke-test" -Wait -PassThru
+          if ($smoke.ExitCode -ne 0) { throw "Installed smoke test failed: $($smoke.ExitCode)" }
+          $uninstaller = "$env:LOCALAPPDATA\Programs\IntraStellar Logistics\ION\unins000.exe"
+          Start-Process $uninstaller -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait
+
+      - name: Create signed update manifest
+        if: github.ref_type == 'tag'
+        env:
+          ION_UPDATE_SIGNING_KEY: ${{ secrets.ION_UPDATE_SIGNING_KEY }}
+        shell: pwsh
+        run: |
+          $version = python scripts/check_versions.py "${{ github.ref_name }}"
+          $installer = "dist\installer\ION-Setup-x64-$version.exe"
+          python scripts/build_release_manifest.py $installer dist/release $version
+          Copy-Item $installer dist/release/
+
+      - name: Publish stable GitHub release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: false
+          draft: false
+          generate_release_notes: true
+          files: |
+            dist/release/ION-Setup-x64-*.exe
+            dist/release/update-manifest.json
+            dist/release/update-manifest.sig
+            dist/release/SHA256SUMS.txt
+
+      - name: Upload build artifact
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ION-Windows
+          path: dist/installer/ION-Setup-x64-*.exe

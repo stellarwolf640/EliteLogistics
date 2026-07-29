@@ -185,3 +185,64 @@ class EliteSettingsInput(BaseModel):
     enabled: bool = False
     journal_directory: str = Field(default="", max_length=1000)
     auto_apply_planning_state: bool = False
+
+
+class SearchDraftPreferences(BaseModel):
+    origin_system_id64: str = ""
+    origin_station_market_id: str = ""
+    origin_location_label: str = ""
+    destination_system_id64: str = ""
+    destination_station_market_id: str = ""
+    destination_location_label: str = ""
+    cargo_capacity: int = Field(default=104, gt=0, le=2000)
+    laden_jump_range: float = Field(default=18.7, gt=0, le=500)
+    pad_size: PadSize = "M"
+    credits: int = Field(default=12_500_000, ge=0)
+    rebuy_reserve: int = Field(default=600_000, ge=0)
+    cash_reserve: int = Field(default=250_000, ge=0)
+    max_market_age_hours: float = Field(default=4, gt=0, le=720)
+    max_station_distance_ls: float = Field(default=2000, ge=0)
+    max_system_distance_ly: float = Field(default=100, gt=0, le=1000)
+    include_fleet_carriers: bool = False
+    include_planetary: bool = False
+    include_odyssey: bool = False
+    hide_low_confidence: bool = True
+
+
+class WindowBounds(BaseModel):
+    x: int | None = None
+    y: int | None = None
+    width: int = Field(default=1500, ge=640, le=10000)
+    height: int = Field(default=950, ge=480, le=10000)
+    maximized: bool = False
+
+
+class PreferencesPayload(BaseModel):
+    schema_version: Literal[2] = 2
+    search_draft: SearchDraftPreferences = Field(default_factory=SearchDraftPreferences)
+    data_mode: Literal["live", "regional", "full"] = "live"
+    close_behavior: Literal["exit", "tray"] = "exit"
+    main_window: WindowBounds = Field(default_factory=WindowBounds)
+    route_window: WindowBounds = Field(
+        default_factory=lambda: WindowBounds(width=1400, height=900)
+    )
+    route_fullscreen: bool = False
+    route_always_on_top: bool = False
+    update_last_checked_at: datetime | None = None
+    elite_enabled: bool = False
+    elite_journal_directory: str = Field(default="", max_length=1000)
+    elite_auto_apply_planning_state: bool = False
+
+
+class ActiveOperationInput(BaseModel):
+    operation_type: str = Field(min_length=1, max_length=60)
+    schema_version: int = Field(default=1, ge=1, le=100)
+    title: str = Field(min_length=1, max_length=240)
+    route_payload: dict
+    activated_at: datetime = Field(default_factory=lambda: datetime.now().astimezone())
+    manual_progress: int = Field(default=0, ge=0, le=10000)
+    status: Literal["active", "paused", "completed"] = "active"
+
+
+class ActiveOperationOutput(ActiveOperationInput):
+    updated_at: datetime

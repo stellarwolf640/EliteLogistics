@@ -5,7 +5,7 @@ produced by **IntraStellar Logistics (ISL)**. It turns commander state, market
 intelligence, navigation data, and future organizational objectives into
 practical routes, alerts, assignments, and operational guidance.
 
-The current release includes one-way trades, round trips, immersion-oriented
+ION 0.2.0 includes one-way trades, round trips, immersion-oriented
 multi-stop Trade Routes, profitable transit, full-screen flight manifests,
 ship profiles, and ship optimization planning.
 
@@ -17,17 +17,26 @@ visited in-game, and track an accepted route on the flight console. When the
 game link is unavailable, the same left-side route rail remains usable as a
 manual step-by-step guide.
 
-## Start
+## Install and start
 
-Double-click **ION** in the project folder, or run `start.ps1` in
-PowerShell. The launcher prepares the local environment when needed and opens
-ION as a native Windows window. The local FastAPI service and
-web-based renderer remain internal implementation details; no browser or
-visible PowerShell window is required during normal use.
+Download `ION-Setup-x64-0.2.0.exe`, install it for your Windows account, and
+launch **ION** from the Start Menu. The installed application includes Python,
+the backend, the interface, and all normal dependencies. Python, Node.js,
+PowerShell, and a source checkout are not required.
 
-The desktop shell uses the installed Microsoft Edge WebView2 runtime. Windows
-10 and 11 normally include it. A second launch focuses the existing ION window
-instead of starting another local service.
+Source checkouts retain `start.ps1` for development convenience.
+
+The installer checks for Microsoft Edge WebView2 and installs the Evergreen
+runtime when it is missing. A second launch focuses the existing ION window.
+Application state lives under
+`%LOCALAPPDATA%\IntraStellar Logistics\ION`; uninstalling ION preserves that
+profile.
+
+The custom ION window includes a native second-screen route console, monitor
+position restoration, folder selection, and optional system-tray behavior.
+Search drafts and the active operation survive restarts. The interface receives
+game, operation, job, market, and update changes over a local event stream
+instead of repeatedly polling the backend.
 
 The first online search uses Spansh to cache the selected system and nearby market candidates. The Data page offers compact live lookup, regional sector caches, or the much larger full-galaxy pack. Full-pack downloads show size, speed, progress, and ETA.
 
@@ -45,13 +54,19 @@ positioning.
 
 ## Development
 
-- Backend: Python 3.12+, FastAPI, SQLAlchemy, Alembic, SQLite
+- Backend: Python 3.14 x64, FastAPI, SQLAlchemy, Alembic, SQLite
 - Frontend: React, TypeScript, Vite, TanStack Query
 - `dev.ps1`: local development servers
 - `start.ps1 -SmokeTest`: short native-window launcher check
 - `python -m pytest backend/tests`: backend test suite
 - `npm --prefix frontend test`: frontend tests
 - `npm --prefix frontend run build`: production interface
+- `npm --prefix frontend run test:e2e`: browser acceptance suite
+- `build.ps1`: PyInstaller one-folder application and Inno Setup installer
+
+Stable update checks use signed manifests from GitHub Releases. Release
+maintainers must configure the `ION_UPDATE_SIGNING_KEY` repository secret; see
+`scripts/configure_release_key.py`.
 
 Market data is community-observed and can change before arrival. Every recommendation therefore includes freshness- and liquidity-based confidence.
 

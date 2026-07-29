@@ -4,14 +4,17 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "elite-logistics"
-version = "0.1.0"
+version = "0.2.0"
 description = "Local Elite Dangerous trade and profitable transit planner"
 requires-python = ">=3.12"
 dependencies = [
   "alembic>=1.14,<2",
   "fastapi>=0.115,<1",
   "httpx>=0.28,<1",
+  "cryptography>=45,<47",
+  "pillow>=11,<13",
   "pydantic>=2.10,<3",
+  "pystray>=0.19,<1",
   "pywebview>=6.2,<7",
   "sqlalchemy>=2.0,<3",
   "uvicorn[standard]>=0.34,<1",
@@ -21,6 +24,7 @@ dependencies = [
 dev = [
   "pytest>=8.3,<9",
   "pytest-asyncio>=0.25,<1",
+  "pyinstaller>=6.21,<7",
 ]
 
 [project.scripts]

@@ -122,6 +122,20 @@ class Preference(Base):
     values: Mapped[dict] = mapped_column(JSON)
 
 
+class ActiveOperation(Base):
+    __tablename__ = "active_operations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    operation_type: Mapped[str] = mapped_column(String(60))
+    schema_version: Mapped[int] = mapped_column(Integer, default=1)
+    title: Mapped[str] = mapped_column(String(240))
+    route_payload: Mapped[dict] = mapped_column(JSON)
+    activated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    manual_progress: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(30), default="active")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class DataImport(Base):
     __tablename__ = "data_imports"
 
@@ -173,7 +187,28 @@ SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 
 def init_database() -> None:
-    Base.metadata.create_all(engine)
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import inspect
+
+    from .config import resource_path
+
+    # A new profile is migrated normally. Older development profiles created
+    # before Alembic was wired into the app are stamped at the initial revision.
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    alembic_ini = resource_path("backend", "alembic.ini")
+    migration_root = resource_path("backend", "migrations")
+    config = Config(str(alembic_ini))
+    config.set_main_option("script_location", str(migration_root))
+    config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
+    if tables and "alembic_version" not in tables:
+        config.attributes["connection"] = engine.connect()
+        try:
+            command.stamp(config, "0001")
+        finally:
+            config.attributes["connection"].close()
+    command.upgrade(config, "head")
     with Session(engine) as session:
         recover_interrupted_jobs(session)
 

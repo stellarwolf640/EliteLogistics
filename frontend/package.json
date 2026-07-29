@@ -1,12 +1,13 @@
 {
   "name": "elite-logistics-ui",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit -p tsconfig.app.json && vite build",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -16,6 +17,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@types/react": "^19.0.0",

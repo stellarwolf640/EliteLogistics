@@ -57,8 +57,14 @@ Trade Routes are intended to become the flagship feature. Unlike Best Trades, th
   in-process FastAPI service serving the compiled frontend and API.
 - The native desktop service uses stable localhost port `8766` by default so
   the WebView profile retains the same origin between launches.
-- `start.ps1` remains the normal Windows launch path and must not expose a
-  browser or console during normal use.
+- Installed builds use `%LOCALAPPDATA%\IntraStellar Logistics\ION` and must
+  never inspect or migrate repository data/browser state.
+- `start.ps1` is source/development convenience. Normal users install and run
+  `ION.exe` without Python, Node, or PowerShell.
+- REST owns commands/snapshots. `WS /api/events` owns change notification and
+  progress. Do not reintroduce frontend polling for Elite or jobs.
+- Persist route-like work through the generic `active_operations` record, not
+  browser storage or a trade-specific singleton.
 
 ## Current interface hierarchy
 
@@ -75,7 +81,8 @@ Home
 ├── Fleet Management
 │   ├── Ship Profiles
 │   └── Ship Optimizations
-└── Data Network
+├── Data Network
+└── ION Settings
 ```
 
 Do not reintroduce a generic permanent website sidebar without an explicit product decision. New major capabilities should normally be placed inside the appropriate service submenu.
@@ -175,9 +182,10 @@ Frontend:
 ```powershell
 npm --prefix frontend test -- --run
 npm --prefix frontend run build
+npm --prefix frontend run test:e2e
 ```
 
-Normal launch:
+Source launch:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\start.ps1
@@ -215,7 +223,10 @@ Development launch:
 - Ship module recommendations are not a full Coriolis/EDSY-grade outfitting simulator.
 - Trade Routes do not yet persist campaigns or synchronize group progress.
 - Price history is not retained in v1.
-- Browser local storage still owns some frontend drafts; moving essential state
-  into SQLite is desktop-transition Phase 2.
-- The second-screen pop-out still uses web window behavior; a shell-managed
-  native flight-console window is desktop-transition Phase 3.
+- The application binary is not Authenticode signed for the friends release,
+  so Windows may show an unknown-publisher warning.
+- The release signing private key is local/secret material and must exist as
+  GitHub Actions secret `ION_UPDATE_SIGNING_KEY`; only its public key is committed.
+- Windows Snap Layout integration is deferred; normal native edge resizing works.
+- The future Linux service, accounts/company administration, other professions,
+  and local AI/voice assistant are intentionally not implemented in 0.2.0.

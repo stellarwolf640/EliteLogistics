@@ -392,3 +392,24 @@ main { min-width: 0; }
   .flight-board > footer, .board-actions { align-items: stretch; flex-direction: column; }
   .module-list article { grid-template-columns: 1fr; }
 }
+/* Native ION frame. pywebview owns resizing; only this strip is draggable. */
+.desktop-frame { position: fixed; inset: 0 0 auto 0; height: 34px; z-index: 1000; display: flex; align-items: stretch; background: #050606; border-bottom: 1px solid var(--line-hi); user-select: none; }
+.desktop-drag-region { flex: 1; display: flex; align-items: center; gap: .7rem; padding: 0 .75rem; color: var(--muted); font: 600 .58rem "Barlow Condensed"; letter-spacing: .12em; }
+.desktop-drag-region span { color: var(--amber); font-size: .8rem; }
+.desktop-frame button { width: 46px; border: 0; border-left: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; font: 600 .56rem "Barlow Condensed"; }
+.desktop-frame button:hover, .desktop-frame button:focus-visible { background: var(--amber-soft); color: var(--amber-hi); }
+.desktop-frame .desktop-close:hover { background: #8d241f; color: white; }
+.desktop-frame + main { padding-top: 34px; }
+.desktop-frame + .flight-board-backdrop { top: 34px; }
+.route-console-loading { min-height: 100vh; display: grid; place-items: center; color: var(--amber); background: #030404; font: 600 .8rem "Barlow Condensed"; letter-spacing: .15em; }
+.route-console-empty { min-height: 100vh; padding: 6rem 2rem 2rem; background: #030404; }
+.path-picker { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .5rem; }
+.path-picker button { margin: 0; }
+.settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.settings-grid > div { border: 1px solid var(--line); padding: 1rem; background: #050606; }
+.settings-grid select { width: 100%; }
+.toggle-row.vertical { display: grid; }
+.runtime-paths { display: grid; gap: .35rem; margin-top: 1rem; }
+.runtime-paths > div { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: .8rem; border-bottom: 1px solid var(--line); padding: .5rem; }
+.runtime-paths span { color: var(--amber); text-transform: uppercase; font: 600 .58rem "Barlow Condensed"; letter-spacing: .1em; }
+.runtime-paths code { color: var(--muted); overflow-wrap: anywhere; }

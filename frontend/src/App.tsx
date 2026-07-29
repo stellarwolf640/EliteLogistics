@@ -11,6 +11,7 @@ import {
   Truck,
   Wrench,
   X,
+  Settings,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "./api";
@@ -24,9 +25,11 @@ import {
   formatCredits,
   formatTime,
 } from "./components";
-import type { EliteStatus, ImmersiveTradeRoute, JobResponse, RoundTrip, SearchDraft, ShipProfile, TradeLeg, TransitResult, TransitSummary } from "./types";
+import type { EliteStatus, ImmersiveTradeRoute, JobResponse, Preferences, RoundTrip, SearchDraft, ShipProfile, TradeLeg, TransitResult, TransitSummary } from "./types";
 import { useSearchDraft } from "./useSearchDraft";
 import { optimizeShip, SHIP_CATALOG, type OptimizationMode } from "./shipCatalog";
+import { connectQueryEvents } from "./events";
+import { desktopCall } from "./desktopBridge";
 
 const routeLabels: Record<string, string[]> = {
   "/": ["HOME"],
@@ -40,6 +43,7 @@ const routeLabels: Record<string, string[]> = {
   "/ships": ["HOME", "FLEET MANAGEMENT", "SHIP PROFILES"],
   "/ship-optimizations": ["HOME", "FLEET MANAGEMENT", "SHIP OPTIMIZATIONS"],
   "/data": ["HOME", "DATA NETWORK"],
+  "/settings": ["HOME", "ION SETTINGS"],
 };
 
 const breadcrumbTargets: Record<string, string> = {
@@ -54,17 +58,19 @@ const breadcrumbTargets: Record<string, string> = {
   "SHIP PROFILES": "/ships",
   "SHIP OPTIMIZATIONS": "/ship-optimizations",
   "DATA NETWORK": "/data",
+  "ION SETTINGS": "/settings",
 };
 
 export default function App() {
   const path = usePath();
   const { draft, setDraft } = useSearchDraft();
+  const queryClient = useQueryClient();
+  useEffect(() => connectQueryEvents(queryClient), [queryClient]);
   const update = (patch: Partial<SearchDraft>) => setDraft((current) => ({ ...current, ...patch }));
   const status = useQuery({ queryKey: ["data-status"], queryFn: api.dataStatus });
   const elite = useQuery({
     queryKey: ["elite-status"],
     queryFn: api.eliteStatus,
-    refetchInterval: (query) => query.state.data?.enabled ? 1500 : 10000,
   });
   useEffect(() => {
     const connection = elite.data;
@@ -88,16 +94,12 @@ export default function App() {
     });
   }, [elite.data, setDraft]);
   if (path === "/flight-board") {
-    try {
-      const payload = JSON.parse(localStorage.getItem("elite-logistics-flight-board") ?? "null");
-      if (payload) return <FlightBoard {...payload} allowPopout={false} onClose={() => window.close()} />;
-    } catch {
-      // A malformed saved board simply returns to the normal planning shell.
-    }
+    return <PersistedRouteConsole />;
   }
 
   return (
     <div className="app-shell">
+      <DesktopFrame />
       <main>
         <ConsoleHeader path={path} observations={status.data?.market_observations ?? 0} elite={elite.data} />
         {path === "/" && <Dashboard status={status.data} draft={draft} elite={elite.data} />}
@@ -111,6 +113,7 @@ export default function App() {
         {path === "/ships" && <ShipsPage draft={draft} update={update} />}
         {path === "/ship-optimizations" && <ShipOptimizationsPage draft={draft} update={update} />}
         {path === "/data" && <DataPage draft={draft} update={update} />}
+        {path === "/settings" && <SettingsPage />}
         {!routeLabels[path] && <Dashboard status={status.data} draft={draft} />}
       </main>
     </div>
@@ -173,6 +176,45 @@ function PageHeader({ eyebrow, title, body }: { eyebrow: string; title: string; 
   );
 }
 
+function PersistedRouteConsole() {
+  const operation = useQuery({ queryKey: ["active-operation"], queryFn: api.activeOperation });
+  if (operation.isLoading) return <><DesktopFrame routeConsole /><div className="route-console-loading">RESTORING ACTIVE OPERATION…</div></>;
+  if (!operation.data) return <><DesktopFrame routeConsole /><div className="route-console-empty"><EmptyState title="No active operation" body="Open a route from the main ION window to populate this console." icon={Route} /></div></>;
+  return <><DesktopFrame routeConsole /><FlightBoard {...operation.data.route_payload} activatedAt={operation.data.activated_at} initialManualStep={operation.data.manual_progress} allowPopout={false} onClose={() => void desktopCall("close_route_console")} /></>;
+}
+
+function DesktopFrame({ routeConsole = false }: { routeConsole?: boolean }) {
+  const [desktop, setDesktop] = useState(Boolean(window.pywebview?.api));
+  const preferences = useQuery({ queryKey: ["preferences"], queryFn: api.preferences });
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    const ready = () => setDesktop(true);
+    window.addEventListener("pywebviewready", ready);
+    return () => window.removeEventListener("pywebviewready", ready);
+  }, []);
+  if (!desktop) return null;
+  return (
+    <div className="desktop-frame">
+      <div className="desktop-drag-region pywebview-drag-region">
+        <span>ION</span><b>{routeConsole ? "ACTIVE ROUTE CONSOLE" : "INTRASTELLAR OPERATIONS NETWORK"}</b>
+      </div>
+      {routeConsole && <>
+        <button aria-label="Toggle always on top" title="Always on top" onClick={() => {
+          const enabled = !(preferences.data?.route_always_on_top ?? false);
+          void desktopCall("set_route_always_on_top", enabled).then(() => queryClient.invalidateQueries({ queryKey: ["preferences"] }));
+        }}>{preferences.data?.route_always_on_top ? "UNPIN" : "PIN"}</button>
+        <button aria-label="Toggle fullscreen" title="Fullscreen" onClick={() => {
+          const enabled = !(preferences.data?.route_fullscreen ?? false);
+          void desktopCall("set_route_fullscreen", enabled).then(() => queryClient.invalidateQueries({ queryKey: ["preferences"] }));
+        }}>{preferences.data?.route_fullscreen ? "WINDOW" : "FULL"}</button>
+      </>}
+      {!routeConsole && <button aria-label="Minimize ION" onClick={() => void desktopCall("minimize")}>—</button>}
+      {!routeConsole && <button aria-label="Maximize or restore ION" onClick={() => void desktopCall("toggle_maximize")}>□</button>}
+      <button className="desktop-close" aria-label={`Close ${routeConsole ? "route console" : "ION"}`} onClick={() => void desktopCall(routeConsole ? "close_route_console" : "close")}>×</button>
+    </div>
+  );
+}
+
 function SearchDataNotice({ assumptions }: { assumptions?: string[] }) {
   const message = [...(assumptions ?? [])].reverse().find((item) =>
     /Refreshed|local data pack|Live Spansh/i.test(item)
@@ -202,6 +244,7 @@ function Dashboard({ status, draft, elite }: { status?: Awaited<ReturnType<typeo
         <ServiceTile index="02" icon={Route} title="Navigation" body="Plan direct and profitable travel across populated space." meta="1 SERVICE" onClick={() => navigate("/navigation")} />
         <ServiceTile index="03" icon={Ship} title="Fleet Management" body="Store ship profiles and plan complete role-specific module loadouts." meta="2 SERVICES" onClick={() => navigate("/fleet")} />
         <ServiceTile index="04" icon={Database} title="Data Network" body="Control live, regional, and full-galaxy market coverage." meta={`${status?.market_observations.toLocaleString() ?? 0} RECORDS`} onClick={() => navigate("/data")} />
+        <ServiceTile index="05" icon={Settings} title="ION Settings" body="Desktop behavior, route-console display, updates, and local diagnostics." meta="SYSTEM CONTROL" onClick={() => navigate("/settings")} />
       </section>
     </div>
   );
@@ -359,7 +402,6 @@ function TransitPage({ draft, update }: { draft: SearchDraft; update: (patch: Pa
     queryKey: ["job", jobId],
     queryFn: () => api.job(jobId!),
     enabled: Boolean(jobId),
-    refetchInterval: (query) => (query.state.data?.status === "complete" || query.state.data?.status === "failed" ? false : 800),
   });
   const result = job.data?.status === "complete" ? (job.data.result as TransitResult) : undefined;
   const options = useMemo(() => result ? [result.direct, ...result.options] : [], [result]);
@@ -518,10 +560,11 @@ function formatBytes(value = 0) {
 function DataPage({ draft, update }: { draft: SearchDraft; update: (patch: Partial<SearchDraft>) => void }) {
   const queryClient = useQueryClient();
   const [jobId, setJobId] = useState<string | null>(null);
-  const [mode, setMode] = useState(() => localStorage.getItem("elite-logistics-data-mode") ?? "live");
+  const preferences = useQuery({ queryKey: ["preferences"], queryFn: api.preferences });
+  const [mode, setMode] = useState("live");
   const [sectorRadius, setSectorRadius] = useState(100);
   const status = useQuery({ queryKey: ["data-status"], queryFn: api.dataStatus });
-  const elite = useQuery({ queryKey: ["elite-status"], queryFn: api.eliteStatus, refetchInterval: 2000 });
+  const elite = useQuery({ queryKey: ["elite-status"], queryFn: api.eliteStatus });
   const [eliteDirectory, setEliteDirectory] = useState("");
   const [eliteEnabled, setEliteEnabled] = useState(false);
   const [eliteAutoApply, setEliteAutoApply] = useState(false);
@@ -534,7 +577,6 @@ function DataPage({ draft, update }: { draft: SearchDraft; update: (patch: Parti
     queryKey: ["job", jobId],
     queryFn: () => api.job(jobId!),
     enabled: Boolean(jobId),
-    refetchInterval: (query) => (["complete", "failed"].includes(query.state.data?.status ?? "") ? false : 1000),
   });
   const region = useMutation({
     mutationFn: () => api.cacheRegion({ ...draft, maxSystemDistanceLy: sectorRadius }),
@@ -553,8 +595,13 @@ function DataPage({ draft, update }: { draft: SearchDraft; update: (patch: Parti
   });
   const chooseMode = (value: string) => {
     setMode(value);
-    localStorage.setItem("elite-logistics-data-mode", value);
+    if (preferences.data && (value === "live" || value === "regional" || value === "full")) {
+      void api.updatePreferences({ ...preferences.data, data_mode: value });
+    }
   };
+  useEffect(() => {
+    if (preferences.data) setMode(preferences.data.data_mode);
+  }, [preferences.data?.data_mode]);
   useEffect(() => {
     if (job.data?.status === "complete") queryClient.invalidateQueries({ queryKey: ["data-status"] });
   }, [job.data?.status, queryClient]);
@@ -574,7 +621,7 @@ function DataPage({ draft, update }: { draft: SearchDraft; update: (patch: Parti
         </div>
         <p className="muted">Read the journal and companion JSON files written by Elite. The game link can update your location, balance, ship limits, cargo, navigation target, and active route progress. Manual planning remains available at all times.</p>
         <div className="form-grid two">
-          <label className="field"><span>Elite journal directory</span><input value={eliteDirectory} onChange={(event) => setEliteDirectory(event.target.value)} placeholder="C:\Users\...\Saved Games\Frontier Developments\Elite Dangerous" /></label>
+          <label className="field"><span>Elite journal directory</span><div className="path-picker"><input value={eliteDirectory} onChange={(event) => setEliteDirectory(event.target.value)} placeholder="C:\Users\...\Saved Games\Frontier Developments\Elite Dangerous" /><button className="secondary" type="button" onClick={() => void desktopCall<string>("choose_journal_folder").then((path) => path && setEliteDirectory(path))}>Browse…</button></div></label>
           <div className="elite-link-actions">
             {elite.data?.reference_directory && <button className="secondary" onClick={() => setEliteDirectory(elite.data!.reference_directory!)}>Use copied reference data</button>}
             <button className="primary" disabled={saveElite.isPending} onClick={() => saveElite.mutate()}>{saveElite.isPending ? <RefreshCw className="spin" size={17} /> : <Cable size={17} />} Save and test link</button>
@@ -651,6 +698,68 @@ function DataPage({ draft, update }: { draft: SearchDraft; update: (patch: Parti
       )}
       {mode === "live" && <Notice>Live lookup is active. Searches request fresh regional candidates only when needed and retain a small local cache for repeat use.</Notice>}
       <Notice>Community market data can change before you arrive. Confidence is reduced using observation age, supply, demand, and estimated arrival time.</Notice>
+    </div>
+  );
+}
+
+function SettingsPage() {
+  const queryClient = useQueryClient();
+  const preferences = useQuery({ queryKey: ["preferences"], queryFn: api.preferences });
+  const diagnostics = useQuery({ queryKey: ["diagnostics"], queryFn: api.diagnostics });
+  const updates = useQuery({ queryKey: ["update-status"], queryFn: api.updateStatus });
+  const checkUpdate = useMutation({ mutationFn: api.checkUpdates, onSuccess: (value) => queryClient.setQueryData(["update-status"], value) });
+  const downloadUpdate = useMutation({ mutationFn: api.downloadUpdate, onSuccess: (value) => queryClient.setQueryData(["update-status"], value) });
+  const save = useMutation({
+    mutationFn: api.updatePreferences,
+    onSuccess: (value) => queryClient.setQueryData(["preferences"], value),
+  });
+  const patch = (change: Partial<Preferences>) => {
+    if (preferences.data) save.mutate({ ...preferences.data, ...change });
+  };
+  return (
+    <div className="page narrow">
+      <PageHeader eyebrow="ION / system control" title="Desktop settings." body="Control native window behavior, route-console display, local storage, and diagnostics." />
+      <section className="planner-panel settings-grid">
+        <div>
+          <span className="eyebrow">Window lifecycle</span>
+          <h2>When the main window closes</h2>
+          <select value={preferences.data?.close_behavior ?? "exit"} onChange={(event) => patch({ close_behavior: event.target.value as "exit" | "tray" })}>
+            <option value="exit">Exit ION completely</option>
+            <option value="tray">Keep running in the system tray</option>
+          </select>
+          <p className="muted">Tray mode keeps the game link, active operation, and local events running.</p>
+        </div>
+        <div>
+          <span className="eyebrow">Second screen</span>
+          <h2>Route console</h2>
+          <div className="toggle-row vertical">
+            <label className="toggle"><input type="checkbox" checked={preferences.data?.route_fullscreen ?? false} onChange={(event) => { patch({ route_fullscreen: event.target.checked }); void desktopCall("set_route_fullscreen", event.target.checked); }} /><span className="switch">●</span>Open fullscreen</label>
+            <label className="toggle"><input type="checkbox" checked={preferences.data?.route_always_on_top ?? false} onChange={(event) => { patch({ route_always_on_top: event.target.checked }); void desktopCall("set_route_always_on_top", event.target.checked); }} /><span className="switch">●</span>Keep above other windows</label>
+          </div>
+        </div>
+      </section>
+      <section className="planner-panel diagnostics">
+        <div className="results-heading"><div><span className="eyebrow">Local diagnostics</span><h2>ION {diagnostics.data?.version ?? "—"}</h2></div><button className="secondary" onClick={() => void diagnostics.refetch()}><RefreshCw size={16} /> Refresh</button></div>
+        <div className="data-cards">
+          <article><Database size={21} /><span>Database</span><strong>{diagnostics.data?.database_ok ? "READY" : "ERROR"}</strong></article>
+          <article><Gauge size={21} /><span>WebView2</span><strong>{diagnostics.data?.webview2_available === null ? "BROWSER MODE" : diagnostics.data?.webview2_available ? "READY" : "MISSING"}</strong></article>
+          <article><Cable size={21} /><span>Game link</span><strong>{diagnostics.data?.game_link.enabled ? "ENABLED" : "DISABLED"}</strong></article>
+        </div>
+        <div className="runtime-paths">{Object.entries(diagnostics.data?.runtime_paths ?? {}).map(([name, path]) => <div key={name}><span>{name}</span><code>{path}</code></div>)}</div>
+        {diagnostics.data?.recent_errors.length ? <Notice tone="warning">{diagnostics.data.recent_errors.at(-1)}</Notice> : <p className="muted">No recent local errors recorded.</p>}
+      </section>
+      <section className="planner-panel update-panel">
+        <div className="results-heading">
+          <div><span className="eyebrow">Stable release channel</span><h2>Application updates</h2></div>
+          <button className="secondary" disabled={checkUpdate.isPending} onClick={() => checkUpdate.mutate()}><RefreshCw className={checkUpdate.isPending ? "spin" : ""} size={16} /> Check for updates</button>
+        </div>
+        <p className="muted">Installed version: {updates.data?.installed_version ?? diagnostics.data?.version ?? "—"}</p>
+        {updates.data?.status === "current" && <Notice>ION is current.</Notice>}
+        {updates.data?.status === "available" && <div className="update-offer"><h3>ION {updates.data.available_version} is available</h3><pre>{updates.data.release_notes || "A verified stable update is ready."}</pre><button className="primary" onClick={() => downloadUpdate.mutate()}>Download verified update</button></div>}
+        {updates.data?.status === "downloading" && <div><progress max={1} value={updates.data.progress} /><p className="muted">{Math.round(updates.data.progress * 100)}% downloaded</p></div>}
+        {updates.data?.status === "ready" && <Notice>Update verified and ready. <button className="text-button" onClick={() => void desktopCall("begin_update_installation")}>Install and relaunch</button></Notice>}
+        {updates.data?.error && <Notice tone="warning">{updates.data.error}</Notice>}
+      </section>
     </div>
   );
 }

@@ -8,6 +8,10 @@ import type {
   SearchDraft,
   ShipProfile,
   TradeResponse,
+  Preferences,
+  ActiveOperation,
+  Diagnostics,
+  UpdateStatus,
 } from "./types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -27,6 +31,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  preferences: () => request<Preferences>("/api/preferences"),
+  updatePreferences: (payload: Preferences) =>
+    request<Preferences>("/api/preferences", { method: "PUT", body: JSON.stringify(payload) }),
+  activeOperation: () => request<ActiveOperation | null>("/api/operations/active"),
+  setActiveOperation: (payload: Omit<ActiveOperation, "updated_at">) =>
+    request<ActiveOperation>("/api/operations/active", { method: "PUT", body: JSON.stringify(payload) }),
+  clearActiveOperation: () => request<void>("/api/operations/active", { method: "DELETE" }),
+  diagnostics: () => request<Diagnostics>("/api/diagnostics"),
+  updateStatus: () => request<UpdateStatus>("/api/updates/status"),
+  checkUpdates: () => request<UpdateStatus>("/api/updates/check", { method: "POST" }),
+  downloadUpdate: () => request<UpdateStatus>("/api/updates/download", { method: "POST" }),
   dataStatus: () => request<DataStatus>("/api/data/status"),
   eliteStatus: () => request<EliteStatus>("/api/elite/status"),
   updateEliteSettings: (payload: { enabled: boolean; journal_directory: string; auto_apply_planning_state: boolean }) =>

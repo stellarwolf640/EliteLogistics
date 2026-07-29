@@ -15,7 +15,12 @@ EliteLogistics/                    Repository name retained for compatibility
 │   └── package.json
 ├── data/                           Local runtime data; ignored by Git
 ├── referenceData/                  Private copied Elite files; ignored by Git
-├── start.ps1                       Production-local launcher
+├── assets/                         ION emblem, ICO family, update public key
+├── installer/ION.iss               Per-user Inno Setup definition
+├── scripts/                        Version, icon, manifest, and key tooling
+├── .github/workflows/windows.yml   Windows tests/build/release automation
+├── build.ps1                       Executable and installer build
+├── start.ps1                       Source checkout launcher
 ├── dev.ps1                         Development launcher
 ├── README.md                       User/developer introduction
 ├── ROADMAP.md                      Planned releases
@@ -29,6 +34,8 @@ EliteLogistics/                    Repository name retained for compatibility
 - Creates the FastAPI application.
 - Registers the API router.
 - Initializes the database through the FastAPI lifespan.
+- Starts/stops the background Elite monitor.
+- Hosts `WS /api/events`, including replay and snapshot fallback.
 - Serves `frontend/dist` in production-local mode.
 - Falls back to `index.html` for frontend routes.
 - Retains a browser-oriented Uvicorn entry point for development/legacy use.
@@ -41,8 +48,11 @@ Native Windows host:
 - Starts FastAPI/Uvicorn in a background thread on `127.0.0.1:8766`.
 - Waits for `/api/health` before opening the interface.
 - Hosts the compiled React application in Edge WebView2 through pywebview.
-- Uses a persistent profile under `data/webview`.
-- Stops the local service when the native window closes.
+- Exposes the trusted `DesktopBridge`.
+- Owns custom-frame controls, folder selection, the second route window,
+  window restoration, tray behavior, and update installation.
+- Uses the source `data/` profile or installed Local AppData profile.
+- Stops the local service and monitor on full exit.
 - Provides service-only and native-window smoke-test modes.
 
 ### `backend/src/elite_logistics/api.py`
@@ -53,6 +63,8 @@ Important endpoints:
 
 ```text
 GET    /api/health
+GET    /api/diagnostics
+WS     /api/events
 GET    /api/data/status
 GET    /api/data/spansh-pack-info
 GET    /api/locations/search
@@ -66,6 +78,13 @@ DELETE /api/ship-profiles/{profile_id}
 
 GET    /api/preferences
 PUT    /api/preferences
+GET    /api/operations/active
+PUT    /api/operations/active
+DELETE /api/operations/active
+
+GET    /api/updates/status
+POST   /api/updates/check
+POST   /api/updates/download
 
 POST   /api/trades/search
 POST   /api/round-trips/search
@@ -144,6 +163,7 @@ Current tables:
 - `preferences`
 - `data_imports`
 - `jobs`
+- `active_operations`
 
 SQLite uses:
 
@@ -180,6 +200,15 @@ Background work:
 - SQLite write retry behavior.
 - Download speed, byte count, ETA, and phase metadata.
 - Resumable `.part` downloads.
+- Event publication for progress, completion, and failure.
+
+### Desktop/event/update modules
+
+- `events.py`: bounded sequence buffer and thread-safe subscribers.
+- `elite_monitor.py`: background journal/file monitor and typed Elite events.
+- `updater.py`: stable-release discovery, Ed25519 manifest verification,
+  streamed installer download, size/hash validation, and handoff to the shell.
+- `version.py`: the canonical `0.2.0` application version.
 
 ### `backend/src/elite_logistics/config.py`
 
@@ -194,11 +223,25 @@ SPANSH_BASE_URL
 ELITE_LOGISTICS_OPEN_BROWSER
 ```
 
+Installed runtime paths:
+
+```text
+%LOCALAPPDATA%\IntraStellar Logistics\ION\
+├── ion.db
+├── cache\
+├── downloads\
+├── logs\
+├── updates\
+└── webview\
+```
+
 ### Backend tests
 
 - `test_engine.py` covers trade math, reserves, confidence, round trips, immersive routes, and transit constraints.
 - `test_provider.py` covers dump parsing and newest-observation precedence.
 - `test_desktop.py` covers port selection, server URLs, and Windows single-instance behavior.
+- `test_desktop_phases.py` covers typed preference recovery, active operations,
+  event replay, window clamping, semantic versions, and Ed25519 verification.
 - `fixtures/tiny_spansh.json` is the deterministic market fixture.
 
 ## Frontend
@@ -221,6 +264,7 @@ Current route hierarchy:
 /ships                  Ship Profiles
 /ship-optimizations     Ship Optimizations
 /data                   Data Network
+/settings               Desktop settings, updater, and diagnostics
 /flight-board           Standalone second-screen manifest
 ```
 
@@ -251,8 +295,15 @@ Frontend representations of API responses and locally persisted planning state.
 
 ### `frontend/src/useSearchDraft.ts`
 
-- Stores the last valid manual planning state in browser local storage.
+- Hydrates and debounces the typed backend preference record.
 - Manual state remains canonical.
+
+### `frontend/src/events.ts` and `desktopBridge.ts`
+
+- One reconnecting WebSocket client per renderer.
+- Cache invalidation from typed event envelopes.
+- Feature components remain transport-neutral.
+- Native calls are available only when pywebview injects its trusted bridge.
 
 ### `frontend/src/shipCatalog.ts`
 
@@ -315,7 +366,7 @@ Cards / flight board / second-screen console
 
 ## Runtime data
 
-Default runtime directory:
+Source runtime directory:
 
 ```text
 ./data/
@@ -324,9 +375,9 @@ Default runtime directory:
 Expected files may include:
 
 ```text
-elite-logistics.db
-elite-logistics.db-wal
-elite-logistics.db-shm
+ion.db
+ion.db-wal
+ion.db-shm
 galaxy_stations.json.gz
 galaxy_stations.json.gz.part
 ```
@@ -365,11 +416,14 @@ Expected checks before publishing:
 .\.venv\Scripts\python.exe -m pytest backend
 npm --prefix frontend test -- --run
 npm --prefix frontend run build
+npm --prefix frontend run test:e2e
+.\build.ps1
 ```
 
 At the time this context was created:
 
-- Backend: 14 tests passing.
+- Backend: 22 tests passing.
 - Frontend: 8 tests passing.
+- End-to-end: 4 scenarios passing.
 - Production frontend build passing.
-- Native launcher and window smoke tests passing.
+- Source, frozen, native-window, installer, installed-app, and uninstall smoke tests passing.

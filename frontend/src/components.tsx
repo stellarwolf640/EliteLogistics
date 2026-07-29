@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "./api";
+import { desktopCall, isDesktop } from "./desktopBridge";
 import type { Confidence, LocationResult, SearchDraft, TradeLeg, TransitSummary } from "./types";
 
 export function formatCredits(value: number) {
@@ -347,6 +348,7 @@ export function FlightBoard({
   summary,
   preflight,
   activatedAt: suppliedActivatedAt,
+  initialManualStep = 0,
   allowPopout = true,
   onClose,
 }: {
@@ -355,16 +357,27 @@ export function FlightBoard({
   summary: { profit: number; seconds: number; distance?: number; jumps?: number };
   preflight?: string;
   activatedAt?: string;
+  initialManualStep?: number;
   allowPopout?: boolean;
   onClose: () => void;
 }) {
   const [activatedAt] = useState(suppliedActivatedAt ?? new Date().toISOString());
-  const [manualStep, setManualStep] = useState(0);
+  const [manualStep, setManualStep] = useState(initialManualStep);
   const elite = useQuery({
     queryKey: ["elite-status"],
     queryFn: api.eliteStatus,
-    refetchInterval: 1500,
   });
+  useEffect(() => {
+    void api.setActiveOperation({
+      operation_type: "cargo_manifest",
+      schema_version: 1,
+      title,
+      route_payload: { title, legs, summary, preflight },
+      activated_at: activatedAt,
+      manual_progress: manualStep,
+      status: "active",
+    });
+  }, [title, activatedAt, manualStep]);
   const live = Boolean(elite.data?.enabled && elite.data.state.game_running);
   const activeStep = live
     ? calculateLiveRouteStep(legs, elite.data!.state, activatedAt)
@@ -428,9 +441,18 @@ export function FlightBoard({
           <span>COMMUNITY MARKET DATA · VERIFY PRICE BEFORE PURCHASE</span>
           <div className="board-actions">
             {allowPopout && <button className="secondary" onClick={() => {
-              localStorage.setItem("elite-logistics-flight-board", JSON.stringify({ title, legs, summary, preflight, activatedAt }));
-              window.open("/flight-board", "elite-logistics-flight-board", "width=1500,height=900");
-            }}>Pop out to second screen</button>}
+              void api.setActiveOperation({
+                operation_type: "cargo_manifest",
+                schema_version: 1,
+                title,
+                route_payload: { title, legs, summary, preflight },
+                activated_at: activatedAt,
+                manual_progress: manualStep,
+                status: "active",
+              }).then(() => isDesktop()
+                ? desktopCall("open_route_console")
+                : window.open("/flight-board", "ion-route-console", "width=1500,height=900"));
+            }}>Open on second screen</button>}
             <button className="primary" onClick={onClose}>{allowPopout ? "Return to planner" : "Close console"}</button>
           </div>
         </footer>

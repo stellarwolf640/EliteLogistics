@@ -6,10 +6,15 @@ backend/*.egg-info/
 backend/src/*.egg-info/
 frontend/node_modules/
 frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
 data/
 referenceData/
 /Elite Logistics.lnk
 /ION.lnk
 *.db
 *.part
+.release-private-key.txt
+build/
+dist/
 .vite/

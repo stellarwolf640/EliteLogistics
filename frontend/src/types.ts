@@ -221,3 +221,91 @@ export interface SearchDraft {
   includeOdyssey: boolean;
   hideLowConfidence: boolean;
 }
+
+export interface WindowBounds {
+  x: number | null;
+  y: number | null;
+  width: number;
+  height: number;
+  maximized: boolean;
+}
+
+export interface Preferences {
+  schema_version: 2;
+  search_draft: {
+    origin_system_id64: string;
+    origin_station_market_id: string;
+    origin_location_label: string;
+    destination_system_id64: string;
+    destination_station_market_id: string;
+    destination_location_label: string;
+    cargo_capacity: number;
+    laden_jump_range: number;
+    pad_size: "S" | "M" | "L";
+    credits: number;
+    rebuy_reserve: number;
+    cash_reserve: number;
+    max_market_age_hours: number;
+    max_station_distance_ls: number;
+    max_system_distance_ly: number;
+    include_fleet_carriers: boolean;
+    include_planetary: boolean;
+    include_odyssey: boolean;
+    hide_low_confidence: boolean;
+  };
+  data_mode: "live" | "regional" | "full";
+  close_behavior: "exit" | "tray";
+  main_window: WindowBounds;
+  route_window: WindowBounds;
+  route_fullscreen: boolean;
+  route_always_on_top: boolean;
+  update_last_checked_at: string | null;
+  elite_enabled: boolean;
+  elite_journal_directory: string;
+  elite_auto_apply_planning_state: boolean;
+}
+
+export interface ActiveOperation {
+  operation_type: string;
+  schema_version: number;
+  title: string;
+  route_payload: {
+    title: string;
+    legs: TradeLeg[];
+    summary: { profit: number; seconds: number; distance?: number; jumps?: number };
+    preflight?: string;
+  };
+  activated_at: string;
+  manual_progress: number;
+  status: "active" | "paused" | "completed";
+  updated_at: string;
+}
+
+export interface EventEnvelope {
+  sequence: number;
+  type: string;
+  timestamp: string;
+  payload: unknown;
+}
+
+export interface Diagnostics {
+  version: string;
+  packaged: boolean;
+  runtime_paths: Record<string, string>;
+  database_ok: boolean;
+  webview2_available: boolean | null;
+  game_link: EliteStatus;
+  recent_errors: string[];
+}
+
+export interface UpdateStatus {
+  status: "idle" | "checking" | "current" | "available" | "downloading" | "ready" | "error";
+  installed_version: string;
+  available_version: string | null;
+  release_notes: string;
+  progress: number;
+  error: string | null;
+  installer_path: string | null;
+  downloaded_bytes?: number;
+  total_bytes?: number;
+}

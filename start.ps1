@@ -78,7 +78,6 @@ if ($frontendBuildRequired) {
 $env:ELITE_LOGISTICS_DATA_DIR = Join-Path $projectRoot "data"
 $env:ELITE_LOGISTICS_OPEN_BROWSER = "0"
 $env:ELITE_LOGISTICS_DESKTOP = "1"
-& $venvPython -m alembic -c "$projectRoot\backend\alembic.ini" upgrade head
 $desktopArguments = @("-m", "elite_logistics.desktop")
 if ($SmokeTest) {
     $desktopArguments += "--window-smoke-test"
