@@ -12,6 +12,7 @@ try {
 
 & "$Root\.venv\Scripts\python.exe" "$Root\scripts\create_icon.py"
 & "$Root\.venv\Scripts\pyinstaller.exe" --clean --noconfirm --distpath "$Root\dist" --workpath "$Root\build\pyinstaller" "$Root\backend\ion.spec"
+& "$Root\scripts\window_smoke.ps1" -Executable "$Root\dist\ION\ION.exe"
 
 $env:ION_VERSION = $Version
 $Inno = if ($env:INNO_SETUP_COMPILER) {

@@ -30,7 +30,9 @@ def configure_logging() -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
-        handlers=[logging.FileHandler(path, encoding="utf-8")],
+        # Diagnostics are session-scoped. Starting a new primary instance
+        # clears errors from older, already-fixed builds.
+        handlers=[logging.FileHandler(path, mode="w", encoding="utf-8")],
         force=True,
     )
 
@@ -167,21 +169,24 @@ class DesktopBridge:
     """Native operations exposed to trusted ION web content only."""
 
     def __init__(self, shell: "DesktopShell"):
-        self.shell = shell
+        # pywebview recursively exposes public, non-callable attributes on a
+        # js_api object. Keep the shell private so its native window graph is
+        # never traversed while the JavaScript bridge is being constructed.
+        self._shell = shell
 
     def minimize(self) -> None:
-        self.shell.main_window.minimize()
+        self._shell.main_window.minimize()
 
     def toggle_maximize(self) -> None:
-        if self.shell.main_maximized:
-            self.shell.main_window.restore()
+        if self._shell.main_maximized:
+            self._shell.main_window.restore()
         else:
-            self.shell.main_window.maximize()
-        self.shell.main_maximized = not self.shell.main_maximized
-        self.shell.persist_window("main", maximized=self.shell.main_maximized)
+            self._shell.main_window.maximize()
+        self._shell.main_maximized = not self._shell.main_maximized
+        self._shell.persist_window("main", maximized=self._shell.main_maximized)
 
     def close(self) -> None:
-        self.shell.handle_main_close()
+        self._shell.handle_main_close()
 
     def choose_journal_folder(self) -> str | None:
         import webview
@@ -189,26 +194,26 @@ class DesktopBridge:
         dialog_type = getattr(webview, "FOLDER_DIALOG", None)
         if dialog_type is None and hasattr(webview, "FileDialog"):
             dialog_type = webview.FileDialog.FOLDER
-        result = self.shell.main_window.create_file_dialog(dialog_type)
+        result = self._shell.main_window.create_file_dialog(dialog_type)
         return str(result[0]) if result else None
 
     def open_route_console(self) -> None:
-        self.shell.open_route_console()
+        self._shell.open_route_console()
 
     def close_route_console(self) -> None:
-        self.shell.close_route_console()
+        self._shell.close_route_console()
 
     def set_route_fullscreen(self, enabled: bool) -> None:
-        self.shell.set_route_fullscreen(enabled)
+        self._shell.set_route_fullscreen(enabled)
 
     def set_route_always_on_top(self, enabled: bool) -> None:
-        self.shell.set_route_always_on_top(enabled)
+        self._shell.set_route_always_on_top(enabled)
 
     def show_ion(self) -> None:
-        self.shell.show_main()
+        self._shell.show_main()
 
     def exit_ion(self) -> None:
-        self.shell.exit()
+        self._shell.exit()
 
     def pause_game_link(self, paused: bool) -> None:
         from .elite_monitor import elite_monitor
@@ -218,7 +223,7 @@ class DesktopBridge:
     def begin_update_installation(self) -> None:
         from .updater import install_downloaded_update
 
-        install_downloaded_update(self.shell.exit)
+        install_downloaded_update(self._shell.exit)
 
 
 class DesktopShell:
@@ -456,7 +461,6 @@ def run_smoke_test() -> int:
 
 
 def run_desktop() -> int:
-    configure_logging()
     instance = SingleInstance()
     try:
         if not instance.acquire():
@@ -466,6 +470,7 @@ def run_desktop() -> int:
         show_error_dialog(str(exc))
         return 1
 
+    configure_logging()
     server = LocalApiServer(port=int(os.getenv("ELITE_LOGISTICS_DESKTOP_PORT", str(DEFAULT_DESKTOP_PORT))))
     shell: DesktopShell | None = None
     try:

@@ -1,7 +1,12 @@
 import socket
 import uuid
 
-from elite_logistics.desktop import LocalApiServer, SingleInstance, find_available_port
+from elite_logistics.desktop import (
+    DesktopBridge,
+    LocalApiServer,
+    SingleInstance,
+    find_available_port,
+)
 
 
 def test_available_port_can_be_bound():
@@ -15,6 +20,19 @@ def test_desktop_server_uses_explicit_loopback_port():
     server = LocalApiServer(port=54321)
 
     assert server.url == "http://127.0.0.1:54321"
+
+
+def test_desktop_bridge_exposes_only_callable_public_members():
+    bridge = DesktopBridge(object())
+
+    public_members = {
+        name: getattr(bridge, name)
+        for name in dir(bridge)
+        if not name.startswith("_")
+    }
+
+    assert public_members
+    assert all(callable(member) for member in public_members.values())
 
 
 def test_windows_single_instance_mutex_rejects_second_owner():

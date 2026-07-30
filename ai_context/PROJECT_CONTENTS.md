@@ -208,7 +208,7 @@ Background work:
 - `elite_monitor.py`: background journal/file monitor and typed Elite events.
 - `updater.py`: stable-release discovery, Ed25519 manifest verification,
   streamed installer download, size/hash validation, and handoff to the shell.
-- `version.py`: the canonical `0.2.0` application version.
+- `version.py`: the canonical `0.2.3` application version.
 
 ### `backend/src/elite_logistics/config.py`
 

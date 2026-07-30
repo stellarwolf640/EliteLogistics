@@ -67,11 +67,12 @@ jobs:
           python scripts/create_icon.py
           pyinstaller --clean --noconfirm --distpath dist --workpath build/pyinstaller backend/ion.spec
 
-      - name: Packaged service smoke test
+      - name: Packaged native-window smoke test
         shell: pwsh
         run: |
-          $process = Start-Process -FilePath "dist\ION\ION.exe" -ArgumentList "--smoke-test" -Wait -PassThru
-          if ($process.ExitCode -ne 0) { throw "Packaged smoke test failed: $($process.ExitCode)" }
+          .\scripts\window_smoke.ps1 `
+            -Executable "dist\ION\ION.exe" `
+            -ProfilePath (Join-Path $env:RUNNER_TEMP "ion-packaged-window-smoke")
 
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
@@ -91,8 +92,9 @@ jobs:
           $install = Start-Process $setup -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait -PassThru
           if ($install.ExitCode -ne 0) { throw "Install failed: $($install.ExitCode)" }
           $app = "$env:LOCALAPPDATA\Programs\IntraStellar Logistics\ION\ION.exe"
-          $smoke = Start-Process $app -ArgumentList "--smoke-test" -Wait -PassThru
-          if ($smoke.ExitCode -ne 0) { throw "Installed smoke test failed: $($smoke.ExitCode)" }
+          .\scripts\window_smoke.ps1 `
+            -Executable $app `
+            -ProfilePath (Join-Path $env:RUNNER_TEMP "ion-installed-window-smoke")
           $uninstaller = "$env:LOCALAPPDATA\Programs\IntraStellar Logistics\ION\unins000.exe"
           Start-Process $uninstaller -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait
 

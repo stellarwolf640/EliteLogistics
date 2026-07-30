@@ -1,9 +1,9 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ConfidenceBadge, FlightBoard, LocationPicker, SearchFields, TradeCard } from "./components";
+import { ConfidenceBadge, FlightBoard, LocationPicker, SearchFields, TradeCard, elitePlanningPatch } from "./components";
 import { ConsoleHeader } from "./App";
-import type { SearchDraft, TradeLeg } from "./types";
+import type { EliteStatus, SearchDraft, TradeLeg } from "./types";
 import { defaultDraft } from "./useSearchDraft";
 import { optimizeShip, SHIP_CATALOG } from "./shipCatalog";
 
@@ -66,6 +66,38 @@ describe("route presentation", () => {
     expect(screen.getByText("Where are you?")).toBeInTheDocument();
     expect(screen.getByText("Look for routes within")).toBeInTheDocument();
     expect(screen.getByDisplayValue("75")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Auto-fill with live data" })).toBeDisabled();
+  });
+
+  it("maps supported live game values into trade and transit fields", () => {
+    const patch = elitePlanningPatch({
+      available: true,
+      system_id64: 10,
+      system_name: "Origin",
+      station_market_id: 11,
+      station_name: "Origin Hub",
+      docked: true,
+      cargo_capacity: 216,
+      max_jump_range: 31.4,
+      credits: 25_000_000,
+      rebuy: 1_200_000,
+      target_system_id64: 20,
+      target_system_name: "Waypoint",
+      target_station_name: "Mercator Port",
+      nav_route: [],
+    } as unknown as EliteStatus["state"], true);
+
+    expect(patch).toMatchObject({
+      originSystemId64: "10",
+      originStationMarketId: "11",
+      originLocationLabel: "Origin Hub, Origin",
+      cargoCapacity: 216,
+      ladenJumpRange: 31.4,
+      credits: 25_000_000,
+      rebuyReserve: 1_200_000,
+      destinationSystemId64: "20",
+      destinationLocationLabel: "Mercator Port, Waypoint",
+    });
   });
 
   it("uses breadcrumb hierarchy entries as navigation controls", () => {
@@ -77,6 +109,17 @@ describe("route presentation", () => {
 
     expect(window.location.pathname).toBe("/operations");
     expect(screen.getByRole("button", { name: "BEST TRADES" })).toBeDisabled();
+  });
+
+  it("keeps available Elite data visibly linked while telemetry is idle", () => {
+    const elite = {
+      enabled: true,
+      state: { available: true, game_running: false },
+    } as EliteStatus;
+
+    render(<ConsoleHeader path="/" observations={100} elite={elite} />);
+
+    expect(screen.getByText("LINKED")).toBeInTheDocument();
   });
 
   it("keeps a location field empty when the operator clears it", () => {

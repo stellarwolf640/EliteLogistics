@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import ctypes
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -28,6 +29,53 @@ RELEVANT_STATUS_FLAGS = {
     8388608: "Being interdicted",
     1073741824: "FSD jumping",
 }
+
+
+def _elite_game_process_running() -> bool:
+    """Return whether the Windows Elite Dangerous client process is active."""
+    if os.name != "nt":
+        return False
+
+    class ProcessEntry32(ctypes.Structure):
+        _fields_ = [
+            ("dwSize", ctypes.c_uint32),
+            ("cntUsage", ctypes.c_uint32),
+            ("th32ProcessID", ctypes.c_uint32),
+            ("th32DefaultHeapID", ctypes.c_void_p),
+            ("th32ModuleID", ctypes.c_uint32),
+            ("cntThreads", ctypes.c_uint32),
+            ("th32ParentProcessID", ctypes.c_uint32),
+            ("pcPriClassBase", ctypes.c_long),
+            ("dwFlags", ctypes.c_uint32),
+            ("szExeFile", ctypes.c_wchar * 260),
+        ]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateToolhelp32Snapshot.argtypes = [ctypes.c_uint32, ctypes.c_uint32]
+    kernel32.CreateToolhelp32Snapshot.restype = ctypes.c_void_p
+    kernel32.Process32FirstW.argtypes = [ctypes.c_void_p, ctypes.POINTER(ProcessEntry32)]
+    kernel32.Process32FirstW.restype = ctypes.c_int
+    kernel32.Process32NextW.argtypes = [ctypes.c_void_p, ctypes.POINTER(ProcessEntry32)]
+    kernel32.Process32NextW.restype = ctypes.c_int
+    kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+    kernel32.CloseHandle.restype = ctypes.c_int
+
+    snapshot = kernel32.CreateToolhelp32Snapshot(0x00000002, 0)
+    if snapshot == ctypes.c_void_p(-1).value:
+        return False
+    try:
+        entry = ProcessEntry32()
+        entry.dwSize = ctypes.sizeof(entry)
+        if not kernel32.Process32FirstW(snapshot, ctypes.byref(entry)):
+            return False
+        while True:
+            executable = entry.szExeFile.casefold()
+            if executable == "elitedangerous64.exe" or executable.startswith("elitedangerous"):
+                return True
+            if not kernel32.Process32NextW(snapshot, ctypes.byref(entry)):
+                return False
+    finally:
+        kernel32.CloseHandle(snapshot)
 
 
 def default_journal_directory() -> Path:
@@ -163,10 +211,12 @@ class EliteDataReader:
             except OSError:
                 file_age = float("inf")
             state.game_running = state.source_kind != "reference" and (
-                0 <= age <= 30 or 0 <= file_age <= 30
+                _elite_game_process_running() or 0 <= age <= 30 or 0 <= file_age <= 30
             )
             if not state.game_running:
-                state.warnings.append("Journal data is available, but Elite does not appear to be running.")
+                state.warnings.append(
+                    "Elite is not currently detected; saved journal data remains linked and available."
+                )
         return state
 
     def _read_journal(self, path: Path, state: ParsedEliteState) -> None:

@@ -5,7 +5,7 @@ produced by **IntraStellar Logistics (ISL)**. It turns commander state, market
 intelligence, navigation data, and future organizational objectives into
 practical routes, alerts, assignments, and operational guidance.
 
-ION 0.2.0 includes one-way trades, round trips, immersion-oriented
+ION 0.2.3 includes one-way trades, round trips, immersion-oriented
 multi-stop Trade Routes, profitable transit, full-screen flight manifests,
 ship profiles, and ship optimization planning.
 
@@ -19,7 +19,7 @@ manual step-by-step guide.
 
 ## Install and start
 
-Download `ION-Setup-x64-0.2.0.exe`, install it for your Windows account, and
+Download `ION-Setup-x64-0.2.3.exe`, install it for your Windows account, and
 launch **ION** from the Start Menu. The installed application includes Python,
 the backend, the interface, and all normal dependencies. Python, Node.js,
 PowerShell, and a source checkout are not required.
