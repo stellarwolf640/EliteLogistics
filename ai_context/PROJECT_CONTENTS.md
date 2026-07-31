@@ -5,6 +5,8 @@
 ```text
 EliteLogistics/                    Repository name retained for compatibility
 ├── ai_context/                     AI-agent onboarding and history
+│   └── COMPUTER_DESIGN.md          Computer capability and safety contract
+│   └── COMPUTER_ROADMAP.md         Computer C0–C12 delivery roadmap
 ├── backend/                        FastAPI application and route engine
 │   ├── migrations/                 Alembic migrations
 │   ├── src/elite_logistics/        Backend package
@@ -70,6 +72,9 @@ GET    /api/data/spansh-pack-info
 GET    /api/locations/search
 GET    /api/elite/status
 PUT    /api/elite/settings
+GET    /api/computer/status
+GET    /api/computer/tools
+GET    /api/computer/controls
 
 GET    /api/ship-profiles
 POST   /api/ship-profiles
@@ -149,6 +154,17 @@ Optional local Elite adapter:
 - Normalizes the current station's `Market.json` into the shared SQLite market
   tables using provider `EliteJournal`.
 
+### `backend/src/elite_logistics/computer.py`
+
+Provider-neutral ION Computer foundation:
+
+- Versioned tool and Class B control catalogues.
+- Read, ION, Game Green, Game Amber, and Confirm permissions.
+- Explicit-user, confirmed-proposal, manual-control, and proactive sources.
+- Default-deny authorization for Computer and game actions.
+- Per-action opt-in and Amber confirmation requirements.
+- No model, speech, raw keyboard, or execution adapter.
+
 ### `backend/src/elite_logistics/database.py`
 
 SQLAlchemy models and database configuration.
@@ -187,6 +203,10 @@ Key request/response types:
 - `TransitRequest`
 - `TransitSummary`
 - `ImmersiveTradeRoute`
+- `ComputerPreferences`
+
+Preferences schema 3 adds nested Computer settings. Schema-2 profiles migrate
+with Computer and Class B controls disabled.
 
 Keep scoring implementation details out of public contracts unless the UI needs them to explain a recommendation.
 
@@ -208,7 +228,7 @@ Background work:
 - `elite_monitor.py`: background journal/file monitor and typed Elite events.
 - `updater.py`: stable-release discovery, Ed25519 manifest verification,
   streamed installer download, size/hash validation, and handoff to the shell.
-- `version.py`: the canonical `0.2.0` application version.
+- `version.py`: the canonical `0.2.3` application version.
 
 ### `backend/src/elite_logistics/config.py`
 
@@ -242,6 +262,8 @@ Installed runtime paths:
 - `test_desktop.py` covers port selection, server URLs, and Windows single-instance behavior.
 - `test_desktop_phases.py` covers typed preference recovery, active operations,
   event replay, window clamping, semantic versions, and Ed25519 verification.
+- `test_computer.py` covers unique allowlisted contracts, default-deny
+  behavior, explicit intent, per-action opt-in, and Amber confirmation.
 - `fixtures/tiny_spansh.json` is the deterministic market fixture.
 
 ## Frontend
@@ -422,8 +444,8 @@ npm --prefix frontend run test:e2e
 
 At the time this context was created:
 
-- Backend: 22 tests passing.
-- Frontend: 8 tests passing.
+- Backend: 34 tests passing.
+- Frontend: 10 tests passing.
 - End-to-end: 4 scenarios passing.
 - Production frontend build passing.
 - Source, frozen, native-window, installer, installed-app, and uninstall smoke tests passing.

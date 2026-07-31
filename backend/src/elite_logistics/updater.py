@@ -24,6 +24,10 @@ RELEASE_URL = f"https://api.github.com/repos/{REPOSITORY}/releases/latest"
 CHECK_INTERVAL = timedelta(hours=24)
 
 
+def _release_not_found(exc: Exception) -> bool:
+    return isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 404
+
+
 def _version_tuple(value: str) -> tuple[int, int, int]:
     clean = value.strip().removeprefix("v")
     parts = clean.split(".")
@@ -102,7 +106,13 @@ class UpdateService:
                     progress=0,
                 )
         except Exception as exc:
-            self._set(status="error", error=str(exc))
+            if _release_not_found(exc):
+                # GitHub returns 404 until the repository has its first
+                # published release. That means there is nothing to install,
+                # not that the local application is unhealthy.
+                self._set(status="current", available_version=None, release_notes="", error=None)
+            else:
+                self._set(status="error", error=str(exc))
         return self.status()
 
     def _verify_manifest(self, content: bytes, signature: bytes) -> None:

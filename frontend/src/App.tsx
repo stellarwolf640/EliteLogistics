@@ -22,6 +22,7 @@ import {
   SearchFields,
   TradeCard,
   TransitCard,
+  elitePlanningPatch,
   formatCredits,
   formatTime,
 } from "./components";
@@ -61,6 +62,19 @@ const breadcrumbTargets: Record<string, string> = {
   "ION SETTINGS": "/settings",
 };
 
+export function eliteLinkVisual(elite?: EliteStatus) {
+  if (!elite?.enabled) {
+    return { className: "", compactLabel: "DISABLED", detailLabel: "LINK DISABLED" };
+  }
+  if (elite.state.game_running) {
+    return { className: "live", compactLabel: "LIVE", detailLabel: "LIVE TELEMETRY" };
+  }
+  if (elite.state.available) {
+    return { className: "ready", compactLabel: "LINKED", detailLabel: "LINK ACTIVE" };
+  }
+  return { className: "", compactLabel: "NO SIGNAL", detailLabel: "NO JOURNAL" };
+}
+
 export default function App() {
   const path = usePath();
   const { draft, setDraft } = useSearchDraft();
@@ -77,18 +91,9 @@ export default function App() {
     const state = connection?.state;
     if (!connection?.enabled || !connection.auto_apply_planning_state || !state?.available || !state.system_id64) return;
     setDraft((current) => {
-      const location = state.docked && state.station_name
-        ? `${state.station_name}, ${state.system_name}`
-        : state.system_name ?? current.originLocationLabel;
       const next = {
         ...current,
-        originSystemId64: String(state.system_id64),
-        originStationMarketId: state.docked && state.station_market_id ? String(state.station_market_id) : "",
-        originLocationLabel: location,
-        cargoCapacity: state.cargo_capacity || current.cargoCapacity,
-        ladenJumpRange: state.max_jump_range || current.ladenJumpRange,
-        credits: state.credits ?? current.credits,
-        rebuyReserve: state.rebuy ?? current.rebuyReserve,
+        ...elitePlanningPatch(state),
       };
       return JSON.stringify(next) === JSON.stringify(current) ? current : next;
     });
@@ -122,6 +127,7 @@ export default function App() {
 
 export function ConsoleHeader({ path, observations, elite }: { path: string; observations: number; elite?: EliteStatus }) {
   const trail = routeLabels[path] ?? ["HOME"];
+  const gameLink = eliteLinkVisual(elite);
   return (
     <header className="console-header">
       <button className="console-brand" onClick={() => navigateTo("/")}>
@@ -136,7 +142,7 @@ export function ConsoleHeader({ path, observations, elite }: { path: string; obs
       </div>
       <div className="header-links">
         <div className="console-status"><span className={observations ? "online" : ""} /><div><b>MARKET LINK</b><small>{observations.toLocaleString()} RECORDS</small></div></div>
-        <div className="console-status"><span className={elite?.enabled && elite.state.game_running ? "online" : elite?.enabled && elite.state.available ? "standby" : ""} /><div><b>GAME LINK</b><small>{elite?.enabled ? elite.state.game_running ? "LIVE" : elite.state.available ? "REFERENCE" : "NO SIGNAL" : "DISABLED"}</small></div></div>
+        <div className="console-status"><span className={gameLink.className === "live" ? "online" : gameLink.className === "ready" ? "standby" : ""} /><div><b>GAME LINK</b><small>{gameLink.compactLabel}</small></div></div>
       </div>
     </header>
   );
@@ -583,14 +589,17 @@ function DataPage({ draft, update }: { draft: SearchDraft; update: (patch: Parti
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["data-status"] }),
   });
   const saveElite = useMutation({
-    mutationFn: () => api.updateEliteSettings({
-      enabled: eliteEnabled,
+    mutationFn: (enabled: boolean) => api.updateEliteSettings({
+      enabled,
       journal_directory: eliteDirectory,
       auto_apply_planning_state: eliteAutoApply,
     }),
     onSuccess: (result) => {
       queryClient.setQueryData(["elite-status"], result);
       queryClient.invalidateQueries({ queryKey: ["data-status"] });
+      setEliteDirectory(result.configured_directory);
+      setEliteEnabled(result.enabled);
+      setEliteAutoApply(result.auto_apply_planning_state);
     },
   });
   const chooseMode = (value: string) => {
@@ -611,24 +620,25 @@ function DataPage({ draft, update }: { draft: SearchDraft; update: (patch: Parti
     setEliteEnabled(elite.data.enabled);
     setEliteAutoApply(elite.data.auto_apply_planning_state);
   }, [elite.data?.configured_directory, elite.data?.enabled, elite.data?.auto_apply_planning_state]);
+  const gameLink = eliteLinkVisual(elite.data);
   return (
     <div className="page narrow">
       <PageHeader eyebrow="Data / coverage" title="Know what your route knows." body="Prices are observations. Freshness and coverage are part of every recommendation." />
       <section className="planner-panel elite-link-panel">
         <div className="elite-link-heading">
           <div><span className="eyebrow">Local telemetry / optional</span><h2>Elite Dangerous game link</h2></div>
-          <div className={`link-state ${elite.data?.state.game_running ? "live" : elite.data?.state.available ? "ready" : ""}`}><Cable size={18} /><span>{elite.data?.state.game_running ? "LIVE TELEMETRY" : elite.data?.state.available ? "DATA READY" : "NO JOURNAL"}</span></div>
+          <div className={`link-state ${gameLink.className}`}><Cable size={18} /><span>{gameLink.detailLabel}</span></div>
         </div>
         <p className="muted">Read the journal and companion JSON files written by Elite. The game link can update your location, balance, ship limits, cargo, navigation target, and active route progress. Manual planning remains available at all times.</p>
         <div className="form-grid two">
           <label className="field"><span>Elite journal directory</span><div className="path-picker"><input value={eliteDirectory} onChange={(event) => setEliteDirectory(event.target.value)} placeholder="C:\Users\...\Saved Games\Frontier Developments\Elite Dangerous" /><button className="secondary" type="button" onClick={() => void desktopCall<string>("choose_journal_folder").then((path) => path && setEliteDirectory(path))}>Browse…</button></div></label>
           <div className="elite-link-actions">
             {elite.data?.reference_directory && <button className="secondary" onClick={() => setEliteDirectory(elite.data!.reference_directory!)}>Use copied reference data</button>}
-            <button className="primary" disabled={saveElite.isPending} onClick={() => saveElite.mutate()}>{saveElite.isPending ? <RefreshCw className="spin" size={17} /> : <Cable size={17} />} Save and test link</button>
+            <button className="primary" disabled={saveElite.isPending} onClick={() => { setEliteEnabled(true); saveElite.mutate(true); }}>{saveElite.isPending ? <RefreshCw className="spin" size={17} /> : <Cable size={17} />} Save and activate link</button>
           </div>
         </div>
         <div className="toggle-row">
-          <label className="toggle"><input type="checkbox" checked={eliteEnabled} onChange={(event) => setEliteEnabled(event.target.checked)} /><span className="switch">●</span>Enable game-file integration</label>
+          <label className="toggle"><input type="checkbox" checked={eliteEnabled} disabled={saveElite.isPending} onChange={(event) => { const enabled = event.target.checked; setEliteEnabled(enabled); saveElite.mutate(enabled); }} /><span className="switch">●</span>Game-file integration active</label>
           <label className="toggle"><input type="checkbox" checked={eliteAutoApply} onChange={(event) => setEliteAutoApply(event.target.checked)} /><span className="switch">●</span>Use game state in planning forms</label>
         </div>
         {elite.data?.state.available && (
@@ -716,6 +726,7 @@ function SettingsPage() {
   const patch = (change: Partial<Preferences>) => {
     if (preferences.data) save.mutate({ ...preferences.data, ...change });
   };
+  const diagnosticGameLink = eliteLinkVisual(diagnostics.data?.game_link);
   return (
     <div className="page narrow">
       <PageHeader eyebrow="ION / system control" title="Desktop settings." body="Control native window behavior, route-console display, local storage, and diagnostics." />
@@ -743,7 +754,7 @@ function SettingsPage() {
         <div className="data-cards">
           <article><Database size={21} /><span>Database</span><strong>{diagnostics.data?.database_ok ? "READY" : "ERROR"}</strong></article>
           <article><Gauge size={21} /><span>WebView2</span><strong>{diagnostics.data?.webview2_available === null ? "BROWSER MODE" : diagnostics.data?.webview2_available ? "READY" : "MISSING"}</strong></article>
-          <article><Cable size={21} /><span>Game link</span><strong>{diagnostics.data?.game_link.enabled ? "ENABLED" : "DISABLED"}</strong></article>
+          <article><Cable size={21} /><span>Game link</span><strong>{diagnosticGameLink.compactLabel}</strong></article>
         </div>
         <div className="runtime-paths">{Object.entries(diagnostics.data?.runtime_paths ?? {}).map(([name, path]) => <div key={name}><span>{name}</span><code>{path}</code></div>)}</div>
         {diagnostics.data?.recent_errors.length ? <Notice tone="warning">{diagnostics.data.recent_errors.at(-1)}</Notice> : <p className="muted">No recent local errors recorded.</p>}

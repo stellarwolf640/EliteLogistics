@@ -15,7 +15,8 @@ from elite_logistics.desktop import _clamp_bounds
 from elite_logistics.config import get_settings
 from elite_logistics.events import EventBus
 from elite_logistics.schemas import ActiveOperationInput, PreferencesPayload
-from elite_logistics.updater import UpdateService, _version_tuple
+from elite_logistics.updater import UpdateService, _release_not_found, _version_tuple
+import httpx
 
 
 def test_corrupt_preferences_fall_back_safely():
@@ -24,6 +25,22 @@ def test_corrupt_preferences_fall_back_safely():
     )
     assert value == PreferencesPayload()
     assert value.close_behavior == "exit"
+
+
+def test_schema_two_preferences_migrate_to_computer_foundation():
+    value = _normalize_preferences(
+        {
+            "schema_version": 2,
+            "close_behavior": "tray",
+            "search_draft": {"origin_location_label": "Sol"},
+        }
+    )
+
+    assert value.schema_version == 3
+    assert value.close_behavior == "tray"
+    assert value.search_draft.origin_location_label == "Sol"
+    assert value.computer.enabled is False
+    assert value.computer.class_b_enabled is False
 
 
 def test_frozen_runtime_uses_clean_local_appdata_profile(tmp_path, monkeypatch):
@@ -110,3 +127,12 @@ def test_update_manifest_requires_matching_ed25519_signature(tmp_path, monkeypat
 
 def test_semantic_versions_do_not_allow_downgrade():
     assert _version_tuple("v0.2.0") > _version_tuple("0.1.9")
+
+
+def test_missing_github_release_is_not_an_application_error():
+    request = httpx.Request("GET", "https://api.github.com/repos/example/releases/latest")
+    response = httpx.Response(404, request=request)
+
+    assert _release_not_found(
+        httpx.HTTPStatusError("Not Found", request=request, response=response)
+    )

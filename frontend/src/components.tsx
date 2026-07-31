@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowRight,
+  Cable,
   Check,
   Clock3,
   Coins,
@@ -9,6 +10,7 @@ import {
   Gauge,
   MapPin,
   Package,
+  RefreshCw,
   Route,
   Search,
   ShieldCheck,
@@ -18,7 +20,7 @@ import {
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import { desktopCall, isDesktop } from "./desktopBridge";
-import type { Confidence, LocationResult, SearchDraft, TradeLeg, TransitSummary } from "./types";
+import type { Confidence, EliteLiveState, LocationResult, SearchDraft, TradeLeg, TransitSummary } from "./types";
 
 export function formatCredits(value: number) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 1, notation: "compact" }).format(value) + " CR";
@@ -177,8 +179,50 @@ export function SearchFields({
   update: (patch: Partial<SearchDraft>) => void;
   transit?: boolean;
 }) {
+  const elite = useQuery({
+    queryKey: ["elite-status"],
+    queryFn: api.eliteStatus,
+  });
+  const [lastFilledAt, setLastFilledAt] = useState<string | null>(null);
+  const [autoFilling, setAutoFilling] = useState(false);
+  const canAutoFill = Boolean(elite.data?.enabled && elite.data.state.available);
+  const autoFill = async () => {
+    setAutoFilling(true);
+    try {
+      const result = await elite.refetch();
+      if (!result.data?.enabled || !result.data.state.available) return;
+      const patch = elitePlanningPatch(result.data.state, transit);
+      if (!Object.keys(patch).length) return;
+      update(patch);
+      setLastFilledAt(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+    } finally {
+      setAutoFilling(false);
+    }
+  };
   return (
     <>
+      <div className="live-data-fill">
+        <div>
+          <span>Elite game link</span>
+          <small>
+            {lastFilledAt
+              ? `Planning fields updated at ${lastFilledAt}`
+              : canAutoFill
+                ? "Live commander, vessel, and position data is ready."
+                : "Activate the game link to populate these fields."}
+          </small>
+        </div>
+        <button
+          className="secondary"
+          type="button"
+          disabled={!canAutoFill || autoFilling}
+          title={canAutoFill ? "Replace supported fields with the latest Elite data" : "Live Elite data is not currently available"}
+          onClick={() => void autoFill()}
+        >
+          {autoFilling ? <RefreshCw className="spin" size={16} /> : <Cable size={16} />}
+          {autoFilling ? "Reading live data…" : "Auto-fill with live data"}
+        </button>
+      </div>
       <div className="form-grid two">
         <LocationPicker
           label={transit ? "Where are you now?" : "Where are you?"}
@@ -246,6 +290,35 @@ export function SearchFields({
       </details>
     </>
   );
+}
+
+export function elitePlanningPatch(state: EliteLiveState, transit = false): Partial<SearchDraft> {
+  const patch: Partial<SearchDraft> = {};
+  if (state.system_id64) {
+    patch.originSystemId64 = String(state.system_id64);
+    patch.originStationMarketId = state.docked && state.station_market_id ? String(state.station_market_id) : "";
+    patch.originLocationLabel = state.docked && state.station_name
+      ? `${state.station_name}, ${state.system_name ?? "Unknown system"}`
+      : state.system_name ?? `System ID ${state.system_id64}`;
+  }
+  if (state.cargo_capacity !== null && state.cargo_capacity > 0) patch.cargoCapacity = state.cargo_capacity;
+  if (state.max_jump_range !== null && state.max_jump_range > 0) patch.ladenJumpRange = state.max_jump_range;
+  if (state.credits !== null) patch.credits = state.credits;
+  if (state.rebuy !== null) patch.rebuyReserve = state.rebuy;
+
+  if (transit) {
+    const routeDestination = state.nav_route.at(-1);
+    const destinationId = state.target_system_id64 ?? routeDestination?.system_id64;
+    const destinationName = state.target_system_name ?? routeDestination?.system_name;
+    if (destinationId) {
+      patch.destinationSystemId64 = String(destinationId);
+      patch.destinationStationMarketId = "";
+      patch.destinationLocationLabel = state.target_station_name && destinationName
+        ? `${state.target_station_name}, ${destinationName}`
+        : destinationName ?? `System ID ${destinationId}`;
+    }
+  }
+  return patch;
 }
 
 function NumberField({

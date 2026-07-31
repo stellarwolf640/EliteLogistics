@@ -2,6 +2,64 @@
 
 This changelog records product and architectural changes that future agents need to understand. It is not limited to public release notes.
 
+## Unreleased — Computer foundation
+
+- Added `computer.py` as the provider-neutral source of truth for Computer
+  tools, Class B controls, invocation sources, and authorization decisions.
+- Added read-only Computer status, tool-catalogue, and control-catalogue APIs.
+- Migrated preferences from schema 2 to schema 3 with a nested, versioned
+  Computer record; Computer and game controls remain disabled by default.
+- Added Command, Lite, Enhanced, Automatic, and Off mode contracts without
+  selecting or bundling a model runtime.
+- Enforced explicit commander intent for game controls, per-action opt-in, and
+  confirmation for protected Amber actions.
+- Deliberately did not add speech, wake word, raw keyboard input, model
+  inference, or game-control execution.
+- Added the canonical `COMPUTER_DESIGN.md` and authorization regression tests.
+- Added `COMPUTER_ROADMAP.md` with the C0–C12 implementation sequence,
+  dependencies, safety gates, and acceptance criteria.
+
+## 0.2.3 — 2026-07-29
+
+### Planning-form live data
+
+- Added a shared **Auto-fill with live data** action to trade, round-trip,
+  multi-stop trade-route, and profitable-transit forms.
+- The action refreshes Elite telemetry before applying current location,
+  docked market, cargo capacity, jump range, balance, and rebuy values.
+- Profitable transit also uses the active navigation target or final nav-route
+  system as its destination when available.
+- Kept manual-only planning limits unchanged and retained the existing
+  preference-controlled continuous auto-apply behavior.
+
+## 0.2.2 — 2026-07-29
+
+### Desktop interface and Elite link
+
+- Kept the application header pinned below the native window controls and
+  themed the page scrollbar to match the ION console.
+- Started each primary desktop session with a fresh diagnostics log so resolved
+  errors do not remain in the current-session health display.
+- Treated a repository with no published GitHub release as current instead of
+  displaying a red update error.
+- Made saving the Elite journal directory activate the link, and propagated
+  disabled, linked, live, and unavailable states consistently across the app.
+- Detect the Elite Dangerous process independently of journal write frequency,
+  keeping an idle but running game live while retaining linked saved telemetry
+  when the game is closed.
+
+## 0.2.1 — 2026-07-29
+
+### Desktop stability
+
+- Prevented pywebview bridge discovery from recursively traversing the native
+  WinForms window and accessibility graph by keeping the desktop shell
+  reference private.
+- Added regression coverage requiring every public desktop-bridge member to be
+  callable.
+- Replaced server-only packaged and installed smoke checks with a bounded
+  native-window smoke test that fails on pywebview errors in `ion.log`.
+
 ## 0.2.0 — 2026-07-29
 
 ### CI correction
