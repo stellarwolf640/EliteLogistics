@@ -39,8 +39,21 @@ This changelog records product and architectural changes that future agents need
   background change monitor.
 - Added the `/computer` in-universe service console for policy, safe tool
   testing, binding readiness, Class B permissions, and local audit visibility.
-- Class B remains preparatory: binding discovery never edits a binding file or
-  sends an input to Elite.
+- Implemented C4's Windows-local Input Bridge with fixed semantic action IDs,
+  discovered keyboard bindings, Elite foreground checks, one-command
+  serialization, rate limits, desired-state checks against `Status.json`,
+  telemetry verification, no automatic retries, an emergency hotkey, events,
+  and local audit records.
+- Added the manual Class B control deck. It works independently of Computer
+  mode but still requires the Class B master switch and per-action opt-in.
+- Implemented C5 deterministic typed Command Mode with explicit synonyms,
+  numeric/filter extraction, ambiguity clarification, lightweight follow-up
+  context, response templates, suggested commands, and Ctrl+Space focus.
+- Added commands for briefings, location, next instruction, route console,
+  round-trip planner preparation, planning filters, ship-system desired states,
+  cockpit interfaces, and bounded power inputs.
+- Binding discovery remains read-only. The Input Bridge uses only an existing
+  conflict-free keyboard binding and never accepts arbitrary key input.
 
 ## 0.2.3 — 2026-07-29
 

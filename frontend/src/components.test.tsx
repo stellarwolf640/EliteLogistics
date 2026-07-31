@@ -269,10 +269,24 @@ describe("route presentation", () => {
             secondary: null,
             status: "ready",
             conflicts: [],
+            ion_status: "ready",
+            input_bridge_available: true,
           }],
           device_kinds: ["keyboard"],
           conflict_count: 0,
           warning: null,
+          input_bridge_available: true,
+        };
+      } else if (url.includes("/api/computer/input-bridge")) {
+        body = {
+          available: true,
+          platform: "windows",
+          emergency_disabled: false,
+          emergency_hotkey: "Ctrl + Shift + Pause",
+          busy: false,
+          active_action: null,
+          last_result: null,
+          minimum_interval_seconds: 0.4,
         };
       }
       return { ok: true, status: 200, json: async () => body } as Response;
@@ -281,6 +295,8 @@ describe("route presentation", () => {
     render(<QueryClientProvider client={client}><ComputerPage /></QueryClientProvider>);
 
     expect(await screen.findByText("Computer settings")).toBeInTheDocument();
+    expect(await screen.findByText("Computer console")).toBeInTheDocument();
+    expect(await screen.findByText("READY FOR FOREGROUND CHECK")).toBeInTheDocument();
     expect(await screen.findByText(/cannot send game inputs/i)).toBeInTheDocument();
     expect(await screen.findByText("Keyboard: L")).toBeInTheDocument();
     const path = screen.getByDisplayValue("C:\\Elite\\Bindings");

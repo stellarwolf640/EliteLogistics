@@ -66,10 +66,14 @@ test("compares direct, fast, balanced, and profit transit plans", async ({ page 
 
 test("configures Computer and runs one audited safe tool", async ({ page }) => {
   await page.goto("/computer");
-  await expect(page.getByRole("heading", { name: "Computer policy and capability." })).toBeVisible();
-  await expect(page.getByText(/No game input is sent/i)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Computer command and control." })).toBeVisible();
+  await expect(page.getByText(/Game input remains disabled/i)).toBeVisible();
 
   await page.getByLabel("Operating mode").selectOption("command");
+  await page.getByLabel("Computer command").fill("Where am I?");
+  await page.getByRole("button", { name: "Execute" }).click();
+  await expect(page.getByText(/Current location:/i)).toBeVisible();
+
   const snapshot = page.locator(".computer-tools article").filter({ hasText: "get operational snapshot" });
   await expect(snapshot.getByRole("button", { name: "Run" })).toBeEnabled();
   await snapshot.getByRole("button", { name: "Run" }).click();
@@ -77,5 +81,6 @@ test("configures Computer and runs one audited safe tool", async ({ page }) => {
   await expect(page.getByText("Latest invocation")).toBeVisible();
   await expect(page.locator(".computer-result")).toContainText("completed");
   await expect(page.getByRole("heading", { name: "Elite control bindings" })).toBeVisible();
-  await expect(page.getByText(/cannot press a key or control Elite/i)).toBeVisible();
+  await expect(page.getByText(/Elite must be foreground/i)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Gear down" })).toBeDisabled();
 });

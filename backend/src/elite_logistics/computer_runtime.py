@@ -13,7 +13,13 @@ from uuid import uuid4
 
 from sqlalchemy import select
 
-from .computer import CONTROLS_BY_ID, InvocationSource, authorize_tool
+from .computer import (
+    CONTROLS_BY_ID,
+    AuthorizationResult,
+    InvocationSource,
+    authorize_control_action,
+    authorize_tool,
+)
 from .database import (
     ActiveOperation,
     Commodity,
@@ -27,6 +33,7 @@ from .database import (
 from .elite_bindings import binding_report, default_bindings_directory
 from .elite_data import EliteDataReader, default_journal_directory
 from .events import event_bus
+from .input_bridge import BridgeContext, input_bridge, keyboard_binding_supported
 from .schemas import ComputerPreferences
 
 
@@ -205,16 +212,38 @@ def _cargo_manifest(_arguments: dict[str, Any]) -> dict[str, Any]:
 def _control_capabilities(_arguments: dict[str, Any]) -> dict[str, Any]:
     preferences, _, directory = _preference_snapshot()
     report = binding_report(directory)
+    bridge_available = input_bridge.status()["available"]
     for capability in report["capabilities"]:
         action = CONTROLS_BY_ID[capability["action_id"]]
+        has_keyboard = any(
+            slot and slot.get("device_kind") == "keyboard"
+            for slot in (capability.get("secondary"), capability.get("primary"))
+        )
+        keyboard_ready = any(
+            slot
+            and slot.get("device_kind") == "keyboard"
+            and keyboard_binding_supported(slot)
+            for slot in (capability.get("secondary"), capability.get("primary"))
+        )
         capability["permission"] = action.permission.value
         capability["permission_enabled"] = (
             preferences.class_b_enabled
             and action.action_id in preferences.enabled_game_actions
         )
-        capability["input_bridge_available"] = False
+        capability["input_bridge_available"] = bridge_available and keyboard_ready
+        capability["ion_status"] = (
+            "conflict"
+            if capability["status"] == "conflict"
+            else "ready"
+            if keyboard_ready
+            else "unsupported_keyboard_binding"
+            if has_keyboard
+            else "requires_keyboard_binding"
+            if capability["status"] != "unbound"
+            else "unbound"
+        )
     report["class_b_enabled"] = preferences.class_b_enabled
-    report["input_bridge_available"] = False
+    report["input_bridge_available"] = bridge_available
     return report
 
 
@@ -368,6 +397,41 @@ def _show_diagnostics(_arguments: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
+GAME_TOOL_GROUPS = {
+    "set_ship_system": "ship_system",
+    "open_game_interface": "game_interface",
+    "set_power_distribution": "power",
+}
+
+
+def _game_control(arguments: dict[str, Any], expected_group: str) -> dict[str, Any]:
+    action_id = str(arguments.get("action_id", "")).strip()
+    action = CONTROLS_BY_ID.get(action_id)
+    if action is None or action.group != expected_group or not action.initial_release:
+        raise ValueError("The requested action is not allowlisted for this game-control tool.")
+    desired_state = arguments.get("desired_state")
+    if desired_state is not None and not isinstance(desired_state, bool):
+        raise ValueError("desired_state must be true, false, or omitted.")
+    _, journal, bindings = _preference_snapshot()
+    return input_bridge.execute(
+        action_id,
+        desired_state,
+        BridgeContext(bindings_directory=bindings, journal_directory=journal),
+    )
+
+
+def _set_ship_system(arguments: dict[str, Any]) -> dict[str, Any]:
+    return _game_control(arguments, "ship_system")
+
+
+def _open_game_interface(arguments: dict[str, Any]) -> dict[str, Any]:
+    return _game_control(arguments, "game_interface")
+
+
+def _set_power_distribution(arguments: dict[str, Any]) -> dict[str, Any]:
+    return _game_control(arguments, "power")
+
+
 HANDLERS: dict[str, ToolHandler] = {
     "get_operational_snapshot": _operational_snapshot,
     "get_ship_state": _ship_state,
@@ -383,7 +447,36 @@ HANDLERS: dict[str, ToolHandler] = {
     "change_search_filters": _change_search_filters,
     "show_information_card": _show_information_card,
     "show_diagnostics": _show_diagnostics,
+    "set_ship_system": _set_ship_system,
+    "open_game_interface": _open_game_interface,
+    "set_power_distribution": _set_power_distribution,
 }
+
+
+def _authorize_invocation(
+    tool_name: str,
+    arguments: dict[str, Any],
+    preferences: ComputerPreferences,
+    source: InvocationSource,
+    *,
+    confirmed: bool = False,
+) -> AuthorizationResult:
+    expected_group = GAME_TOOL_GROUPS.get(tool_name)
+    if expected_group is not None:
+        action_id = str(arguments.get("action_id", "")).strip()
+        action = CONTROLS_BY_ID.get(action_id)
+        if action is None or action.group != expected_group or not action.initial_release:
+            return AuthorizationResult(
+                False, "Unknown or prohibited game-control action for this tool."
+            )
+    tool_result = authorize_tool(
+        tool_name, preferences, source, confirmed=confirmed
+    )
+    if not tool_result.allowed or expected_group is None:
+        return tool_result
+    return authorize_control_action(
+        action_id, preferences, source, confirmed=confirmed
+    )
 
 
 def _serialize_invocation(record: ComputerInvocation) -> dict[str, Any]:
@@ -483,7 +576,9 @@ def invoke_tool(
     *,
     timeout_seconds: float = 5,
 ) -> dict[str, Any]:
-    authorization = authorize_tool(tool_name, preferences, source)
+    authorization = _authorize_invocation(
+        tool_name, arguments, preferences, source
+    )
     invocation_id = str(uuid4())
     now = _now()
     confirmation_id: str | None = None
@@ -596,8 +691,12 @@ def resolve_confirmation(
             session.commit()
             return _serialize_invocation(invocation)
         source = InvocationSource(confirmation.source)
-        authorization = authorize_tool(
-            confirmation.tool_name, preferences, source, confirmed=True
+        authorization = _authorize_invocation(
+            confirmation.tool_name,
+            dict(invocation.arguments),
+            preferences,
+            source,
+            confirmed=True,
         )
         if not authorization.allowed:
             invocation.status = "denied"

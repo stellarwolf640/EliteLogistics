@@ -330,6 +330,28 @@ export interface ComputerInvocation {
   completed_at: string | null;
 }
 
+export interface ComputerCommandResponse {
+  session_id: string;
+  text: string;
+  intent: string;
+  confidence: number;
+  clarification: string | null;
+  reply: string;
+  invocations: ComputerInvocation[];
+  suggestions: string[];
+}
+
+export interface InputBridgeStatus {
+  available: boolean;
+  platform: string;
+  emergency_disabled: boolean;
+  emergency_hotkey: string;
+  busy: boolean;
+  active_action: string | null;
+  last_result: Record<string, unknown> | null;
+  minimum_interval_seconds: number;
+}
+
 export interface BindingSlot {
   device: string;
   device_kind: "keyboard" | "mouse" | "controller" | "hotas" | "unknown";
@@ -346,6 +368,8 @@ export interface BindingCapability {
   secondary: BindingSlot | null;
   status: "ready" | "unbound" | "conflict";
   conflicts: string[];
+  ion_status?: "ready" | "unbound" | "conflict" | "requires_keyboard_binding" | "unsupported_keyboard_binding";
+  input_bridge_available?: boolean;
 }
 
 export interface BindingReport {
@@ -359,6 +383,7 @@ export interface BindingReport {
   device_kinds: string[];
   conflict_count: number;
   warning: string | null;
+  input_bridge_available?: boolean;
 }
 
 export interface ActiveOperation {

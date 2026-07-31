@@ -20,6 +20,7 @@ RELEVANT_STATUS_FLAGS = {
     4: "Landing gear down",
     16: "Supercruise",
     64: "Hardpoints deployed",
+    256: "Ship lights on",
     512: "Cargo scoop deployed",
     2048: "Fuel scooping",
     131072: "FSD charging",
@@ -27,6 +28,7 @@ RELEVANT_STATUS_FLAGS = {
     1048576: "Overheating",
     4194304: "In danger",
     8388608: "Being interdicted",
+    268435456: "Night vision on",
     1073741824: "FSD jumping",
 }
 
@@ -157,6 +159,10 @@ class ParsedEliteState:
     target_station_name: str | None = None
     landing_pad: int | None = None
     nav_route: list[dict[str, Any]] = field(default_factory=list)
+    status_flags_value: int = 0
+    status_flags2_value: int = 0
+    gui_focus: int = 0
+    power_pips: list[int] = field(default_factory=list)
     status_flags: list[str] = field(default_factory=list)
     transactions: list[dict[str, Any]] = field(default_factory=list)
     files: dict[str, bool] = field(default_factory=dict)
@@ -378,6 +384,15 @@ class EliteDataReader:
         if not payload:
             return
         flags = int(payload.get("Flags", 0))
+        state.status_flags_value = flags
+        state.status_flags2_value = int(payload.get("Flags2", 0))
+        state.gui_focus = int(payload.get("GuiFocus", 0))
+        pips = payload.get("Pips")
+        state.power_pips = (
+            [int(value) for value in pips[:3]]
+            if isinstance(pips, list) and len(pips) >= 3
+            else []
+        )
         state.status_flags = [label for bit, label in RELEVANT_STATUS_FLAGS.items() if flags & bit]
         if flags & 1:
             state.docked = True

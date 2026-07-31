@@ -79,6 +79,12 @@ export function connectQueryEvents(queryClient: QueryClient) {
       void queryClient.invalidateQueries({ queryKey: ["computer-status"] });
       void queryClient.invalidateQueries({ queryKey: ["computer-invocations"] });
     }
+    if (
+      event.type.startsWith("computer.control.")
+      || event.type.startsWith("computer.input_bridge.")
+    ) {
+      void queryClient.invalidateQueries({ queryKey: ["computer-input-bridge"] });
+    }
     if (event.type === "computer.bindings.changed") {
       void queryClient.invalidateQueries({ queryKey: ["computer-bindings"] });
     }

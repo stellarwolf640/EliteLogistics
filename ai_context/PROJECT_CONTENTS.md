@@ -78,6 +78,11 @@ GET    /api/computer/controls
 PUT    /api/computer/settings
 POST   /api/computer/settings/reset
 POST   /api/computer/tools/invoke
+POST   /api/computer/commands
+POST   /api/computer/controls/execute
+GET    /api/computer/input-bridge
+POST   /api/computer/input-bridge/emergency-disable
+POST   /api/computer/input-bridge/reset
 GET    /api/computer/invocations
 POST   /api/computer/invocations/{invocation_id}/cancel
 POST   /api/computer/confirmations/{confirmation_id}
@@ -176,12 +181,19 @@ Provider-neutral ION Computer foundation:
 ### Computer runtime and binding modules
 
 - `computer_runtime.py`: the single policy-gated executor for Read and ION
-  tools, immutable confirmation proposals, timeout/cancellation handling,
-  structured results, WebSocket events, and the local invocation audit.
+  tools and Class B controls, immutable confirmation proposals,
+  timeout/cancellation handling, structured results, WebSocket events, and the
+  local invocation audit.
 - `elite_bindings.py`: read-only active `.binds` discovery, XML parsing,
   primary/secondary binding normalization, device classification, conflict
   detection, capability reporting, and file-change monitoring.
-- Neither module sends keyboard, mouse, HOTAS, or other game input.
+- `input_bridge.py`: Windows-local, foreground-gated one-shot execution of
+  allowlisted keyboard bindings, desired-state verification, rate limiting,
+  serialization, and emergency disable.
+- `computer_commands.py`: deterministic typed-intent parsing, controlled
+  follow-up context, template responses, and shared-executor dispatch.
+- The bridge never accepts raw keys, cannot simulate HOTAS/controller input,
+  and does not run multi-step game procedures.
 
 ### `backend/src/elite_logistics/database.py`
 
@@ -308,7 +320,7 @@ Current route hierarchy:
 /ships                  Ship Profiles
 /ship-optimizations     Ship Optimizations
 /data                   Data Network
-/computer               Computer settings, safe tools, bindings, and audit
+/computer               Typed Computer, manual controls, policy, bindings, and audit
 /settings               Desktop settings, updater, and diagnostics
 /flight-board           Standalone second-screen manifest
 ```

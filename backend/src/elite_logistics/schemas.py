@@ -248,6 +248,18 @@ class ComputerToolInvocationInput(BaseModel):
     timeout_seconds: float = Field(default=5, ge=0.1, le=30)
 
 
+class ComputerCommandInput(BaseModel):
+    text: str = Field(min_length=1, max_length=500)
+    activation: Literal["typed"] = "typed"
+    session_id: str | None = Field(default=None, max_length=100)
+
+
+class ComputerManualControlInput(BaseModel):
+    action_id: str = Field(min_length=1, max_length=100)
+    desired_state: bool | None = None
+    timeout_seconds: float = Field(default=5, ge=0.1, le=10)
+
+
 class PreferencesPayload(BaseModel):
     schema_version: Literal[3] = 3
     search_draft: SearchDraftPreferences = Field(default_factory=SearchDraftPreferences)

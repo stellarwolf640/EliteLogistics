@@ -213,6 +213,8 @@ proven.
 
 ## C4 — Local Input Bridge and manual control panel
 
+**Status: implemented**
+
 Prove Class B control safety without language interpretation.
 
 ### Initial Green control pack
@@ -279,6 +281,8 @@ For supported stateful controls:
 - Manual controls work with AI disabled.
 
 ## C5 — Deterministic Computer Command Mode
+
+**Status: implemented**
 
 Add the first functional Computer without a language model.
 
@@ -586,8 +590,8 @@ https://www.frontier.co.uk/legal/eula
 2. Build C1 settings. **Complete**
 3. Build C2 safe ION tool execution. **Complete**
 4. Build C3 binding discovery. **Complete**
-5. Build C4 manual Input Bridge.
-6. Build C5 deterministic text Computer.
+5. Build C4 manual Input Bridge. **Complete**
+6. Build C5 deterministic text Computer. **Complete**
 7. Add C6 voice output.
 8. Add C7 speech input.
 9. Complete planning tools in C8.

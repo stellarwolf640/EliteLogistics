@@ -17,6 +17,8 @@ import type {
   ComputerTool,
   ComputerControl,
   ComputerInvocation,
+  ComputerCommandResponse,
+  InputBridgeStatus,
   BindingReport,
 } from "./types";
 
@@ -66,6 +68,25 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ tool_name, arguments: args, source: "explicit_user", timeout_seconds: 5 }),
     }),
+  executeManualControl: (action_id: string, desired_state?: boolean) =>
+    request<ComputerInvocation>("/api/computer/controls/execute", {
+      method: "POST",
+      body: JSON.stringify({
+        action_id,
+        ...(desired_state === undefined ? {} : { desired_state }),
+        timeout_seconds: 5,
+      }),
+    }),
+  runComputerCommand: (text: string, session_id?: string) =>
+    request<ComputerCommandResponse>("/api/computer/commands", {
+      method: "POST",
+      body: JSON.stringify({ text, activation: "typed", session_id }),
+    }),
+  inputBridgeStatus: () => request<InputBridgeStatus>("/api/computer/input-bridge"),
+  emergencyDisableInputBridge: () =>
+    request<InputBridgeStatus>("/api/computer/input-bridge/emergency-disable", { method: "POST" }),
+  resetInputBridge: () =>
+    request<InputBridgeStatus>("/api/computer/input-bridge/reset", { method: "POST" }),
   resolveComputerConfirmation: (confirmationId: string, approve: boolean) =>
     request<ComputerInvocation>(`/api/computer/confirmations/${confirmationId}`, {
       method: "POST",

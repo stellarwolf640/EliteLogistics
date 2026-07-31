@@ -1,12 +1,17 @@
 import time
 from pathlib import Path
 
+import pytest
+from fastapi import HTTPException
+from pydantic import ValidationError
 from sqlalchemy.orm import sessionmaker
 
 from elite_logistics.api import (
     computer_controls,
     computer_status,
     computer_tools,
+    execute_manual_computer_control,
+    invoke_computer_tool,
     put_computer_settings,
     reset_computer_settings,
 )
@@ -23,6 +28,7 @@ from elite_logistics.computer_runtime import (
     invoke_tool,
     resolve_confirmation,
 )
+from elite_logistics.computer_commands import execute_command, interpret_command
 from elite_logistics.database import ComputerInvocation
 from elite_logistics.elite_bindings import (
     binding_report,
@@ -30,7 +36,13 @@ from elite_logistics.elite_bindings import (
     locate_active_bindings,
     parse_bindings_file,
 )
-from elite_logistics.schemas import ComputerPreferences
+from elite_logistics.input_bridge import BridgeContext, InputBridge
+from elite_logistics.schemas import (
+    ComputerCommandInput,
+    ComputerManualControlInput,
+    ComputerPreferences,
+    ComputerToolInvocationInput,
+)
 
 
 def enabled_preferences(
@@ -337,3 +349,226 @@ def test_binding_monitor_detects_file_changes_without_sending_input(
 
     assert changed is not None
     assert changed["available"] is True
+
+
+def _copy_binding_fixture(tmp_path: Path) -> Path:
+    fixture = (
+        Path(__file__).parent
+        / "fixtures"
+        / "bindings"
+        / "MixedCustom.4.1.binds"
+    )
+    target = tmp_path / fixture.name
+    target.write_bytes(fixture.read_bytes())
+    (tmp_path / "StartPreset.start").write_text(
+        "MixedCustom.4.1\n", encoding="utf-8"
+    )
+    return target
+
+
+def test_input_bridge_verifies_desired_state_and_prevents_double_toggle(tmp_path):
+    _copy_binding_fixture(tmp_path)
+    status = {"Flags": 0}
+    sent = []
+
+    def send(binding):
+        sent.append(binding.display)
+        status["Flags"] = 4
+
+    bridge = InputBridge(
+        foreground_checker=lambda: True,
+        sender=send,
+        status_reader=lambda _directory: status,
+    )
+    context = BridgeContext(tmp_path, tmp_path)
+
+    first = bridge.execute("landing_gear", True, context)
+    second = bridge.execute("landing_gear", True, context)
+
+    assert first["outcome"] == "verified"
+    assert second["outcome"] == "already_set"
+    assert sent == ["Keyboard: LeftControl + L"]
+
+
+def test_input_bridge_blocks_unfocused_unbound_and_emergency_disabled_actions(
+    tmp_path,
+):
+    _copy_binding_fixture(tmp_path)
+    bridge = InputBridge(
+        foreground_checker=lambda: False,
+        sender=lambda _binding: None,
+        status_reader=lambda _directory: {"Flags": 0},
+    )
+    context = BridgeContext(tmp_path, tmp_path)
+
+    try:
+        bridge.execute("landing_gear", True, context)
+        assert False, "Unfocused Elite should block input."
+    except RuntimeError as exc:
+        assert "foreground" in str(exc).casefold()
+
+    try:
+        bridge.execute("cargo_scoop", True, context)
+        assert False, "A HOTAS-only binding should block input."
+    except RuntimeError as exc:
+        assert "keyboard binding" in str(exc).casefold()
+
+    bridge.emergency_disable()
+    try:
+        bridge.execute("landing_gear", True, context)
+        assert False, "Emergency disable should block input."
+    except RuntimeError as exc:
+        assert "emergency-disabled" in str(exc).casefold()
+
+
+def test_manual_controls_work_with_computer_off_but_still_require_action_opt_in(
+    session, monkeypatch
+):
+    _runtime_factory(session, monkeypatch)
+    monkeypatch.setattr(
+        "elite_logistics.computer_runtime.input_bridge.execute",
+        lambda action_id, desired_state, _context: {
+            "action_id": action_id,
+            "desired_state": desired_state,
+            "outcome": "verified",
+        },
+    )
+    monkeypatch.setattr(
+        "elite_logistics.computer_runtime._preference_snapshot",
+        lambda: (ComputerPreferences(), Path("."), Path(".")),
+    )
+    preferences = ComputerPreferences(
+        enabled=False,
+        mode="off",
+        class_b_enabled=True,
+        enabled_game_actions=["landing_gear"],
+    )
+
+    allowed = invoke_tool(
+        "set_ship_system",
+        {"action_id": "landing_gear", "desired_state": True},
+        InvocationSource.MANUAL_CONTROL,
+        preferences,
+    )
+    denied = invoke_tool(
+        "set_ship_system",
+        {"action_id": "cargo_scoop", "desired_state": True},
+        InvocationSource.MANUAL_CONTROL,
+        preferences,
+    )
+
+    assert allowed["status"] == "completed", allowed["error"]
+    assert denied["status"] == "denied"
+    assert "not enabled" in denied["error"].casefold()
+
+
+def test_deterministic_command_interpreter_extracts_intents_and_clarifies():
+    route = interpret_command("Find a round trip within 125 light-years.")
+    control = interpret_command("Landing gear down.")
+    ambiguous = interpret_command("Landing gear.")
+    unsupported = interpret_command("Write me a poem about Sol.")
+    followup = interpret_command(
+        "Make it 80 ly", {"last_intent": "round_trip"}
+    )
+
+    assert route.name == "round_trip"
+    assert route.arguments["distance_ly"] == 125
+    assert control.arguments == {
+        "action_id": "landing_gear",
+        "desired_state": True,
+    }
+    assert ambiguous.clarification
+    assert unsupported.name == "unsupported"
+    assert followup.arguments["distance_ly"] == 80
+
+
+def test_deterministic_command_uses_shared_executor(monkeypatch):
+    calls = []
+
+    def fake_invoke(tool, arguments, source, _preferences, timeout_seconds):
+        calls.append((tool, arguments, source, timeout_seconds))
+        return {
+            "id": str(len(calls)),
+            "tool_name": tool,
+            "source": source.value,
+            "status": "completed",
+            "arguments": arguments,
+            "result": {"action": "ok"},
+            "error": None,
+            "confirmation_id": None,
+            "created_at": "2026-01-01T00:00:00+00:00",
+            "completed_at": "2026-01-01T00:00:00+00:00",
+        }
+
+    monkeypatch.setattr(
+        "elite_logistics.computer_commands.invoke_tool", fake_invoke
+    )
+    preferences = ComputerPreferences(enabled=True, mode="command")
+
+    response = execute_command(
+        "Find a round trip within 100 ly", preferences, session_id="test"
+    )
+
+    assert response["intent"] == "round_trip"
+    assert [call[0] for call in calls] == [
+        "change_search_filters",
+        "open_ion_view",
+    ]
+    assert calls[0][1]["filters"]["maxSystemDistanceLy"] == 100
+    assert all(call[2] == InvocationSource.EXPLICIT_USER for call in calls)
+
+
+def test_command_endpoint_contract_rejects_background_activation():
+    with pytest.raises(ValidationError):
+        ComputerCommandInput(
+            text="Landing gear down",
+            activation="background",
+        )
+
+
+def test_manual_control_has_dedicated_api_and_generic_source_cannot_spoof_it(
+    session, monkeypatch
+):
+    _runtime_factory(session, monkeypatch)
+    monkeypatch.setattr(
+        "elite_logistics.computer_runtime._preference_snapshot",
+        lambda: (ComputerPreferences(), Path("."), Path(".")),
+    )
+    monkeypatch.setattr(
+        "elite_logistics.computer_runtime.input_bridge.execute",
+        lambda action_id, desired_state, _context: {
+            "action_id": action_id,
+            "desired_state": desired_state,
+            "outcome": "verified",
+        },
+    )
+    put_computer_settings(
+        ComputerPreferences(
+            class_b_enabled=True,
+            enabled_game_actions=["landing_gear"],
+        ),
+        session,
+    )
+
+    manual = execute_manual_computer_control(
+        ComputerManualControlInput(
+            action_id="landing_gear",
+            desired_state=True,
+        ),
+        session,
+    )
+    assert manual["status"] == "completed"
+
+    with pytest.raises(HTTPException) as exc:
+        invoke_computer_tool(
+            ComputerToolInvocationInput(
+                tool_name="set_ship_system",
+                arguments={
+                    "action_id": "landing_gear",
+                    "desired_state": True,
+                },
+                source="manual_control",
+            ),
+            session,
+        )
+    assert "dedicated endpoint" in str(exc.value).casefold()

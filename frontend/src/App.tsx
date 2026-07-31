@@ -17,8 +17,10 @@ import {
   ShieldCheck,
   RotateCcw,
   Terminal,
+  Send,
+  AlertOctagon,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 import {
   EmptyState,
@@ -31,7 +33,7 @@ import {
   formatCredits,
   formatTime,
 } from "./components";
-import type { BindingCapability, ComputerInvocation, ComputerPreferences, EliteStatus, ImmersiveTradeRoute, JobResponse, Preferences, RoundTrip, SearchDraft, ShipProfile, TradeLeg, TransitResult, TransitSummary } from "./types";
+import type { BindingCapability, ComputerCommandResponse, ComputerInvocation, ComputerPreferences, EliteStatus, ImmersiveTradeRoute, JobResponse, Preferences, RoundTrip, SearchDraft, ShipProfile, TradeLeg, TransitResult, TransitSummary } from "./types";
 import { useSearchDraft } from "./useSearchDraft";
 import { optimizeShip, SHIP_CATALOG, type OptimizationMode } from "./shipCatalog";
 import { connectQueryEvents } from "./events";
@@ -763,8 +765,13 @@ export function ComputerPage() {
   const controls = useQuery({ queryKey: ["computer-controls"], queryFn: api.computerControls });
   const bindings = useQuery({ queryKey: ["computer-bindings"], queryFn: api.computerBindings });
   const invocations = useQuery({ queryKey: ["computer-invocations"], queryFn: api.computerInvocations });
+  const bridge = useQuery({ queryKey: ["computer-input-bridge"], queryFn: api.inputBridgeStatus });
   const [result, setResult] = useState<ComputerInvocation | null>(null);
   const [bindingsDirectory, setBindingsDirectory] = useState("");
+  const [commandText, setCommandText] = useState("");
+  const [commandSession, setCommandSession] = useState<string>();
+  const [transcript, setTranscript] = useState<ComputerCommandResponse[]>([]);
+  const commandInput = useRef<HTMLInputElement>(null);
   const save = useMutation({
     mutationFn: api.updateComputerSettings,
     onSuccess: () => {
@@ -789,6 +796,33 @@ export function ComputerPage() {
       void queryClient.invalidateQueries({ queryKey: ["computer-invocations"] });
     },
   });
+  const manualInvoke = useMutation({
+    mutationFn: ({ name, args }: { name: string; args: Record<string, unknown> }) =>
+      api.executeManualControl(
+        String(args.action_id),
+        typeof args.desired_state === "boolean" ? args.desired_state : undefined,
+      ),
+    onSuccess: (value) => {
+      setResult(value);
+      void bridge.refetch();
+      void queryClient.invalidateQueries({ queryKey: ["computer-invocations"] });
+    },
+  });
+  const command = useMutation({
+    mutationFn: (text: string) => api.runComputerCommand(text, commandSession),
+    onSuccess: (value) => {
+      setCommandSession(value.session_id);
+      setTranscript((current) => [...current.slice(-19), value]);
+      setCommandText("");
+      if (value.invocations.length) setResult(value.invocations.at(-1) ?? null);
+      void queryClient.invalidateQueries({ queryKey: ["computer-invocations"] });
+    },
+  });
+  const emergency = useMutation({
+    mutationFn: (disabled: boolean) =>
+      disabled ? api.emergencyDisableInputBridge() : api.resetInputBridge(),
+    onSuccess: (value) => queryClient.setQueryData(["computer-input-bridge"], value),
+  });
   const resolve = useMutation({
     mutationFn: ({ id, approve }: { id: string; approve: boolean }) =>
       api.resolveComputerConfirmation(id, approve),
@@ -801,6 +835,16 @@ export function ComputerPage() {
   useEffect(() => {
     if (settings) setBindingsDirectory(settings.bindings_directory);
   }, [settings?.bindings_directory]);
+  useEffect(() => {
+    const focusCommand = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.code === "Space") {
+        event.preventDefault();
+        commandInput.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", focusCommand);
+    return () => window.removeEventListener("keydown", focusCommand);
+  }, []);
   const patch = (change: Partial<ComputerPreferences>) => {
     if (settings) save.mutate({ ...settings, ...change });
   };
@@ -825,6 +869,33 @@ export function ComputerPage() {
   const bindingByAction = new globalThis.Map<string, BindingCapability>(
     (bindings.data?.capabilities ?? []).map((capability) => [capability.action_id, capability]),
   );
+  const submitCommand = (text = commandText) => {
+    const value = text.trim();
+    if (value && !command.isPending) command.mutate(value);
+  };
+  const manualControl = (
+    tool: "set_ship_system" | "open_game_interface" | "set_power_distribution",
+    actionId: string,
+    desiredState?: boolean,
+  ) => {
+    manualInvoke.mutate({
+      name: tool,
+      args: {
+        action_id: actionId,
+        ...(desiredState === undefined ? {} : { desired_state: desiredState }),
+      },
+    });
+  };
+  const controlReady = (actionId: string) => {
+    const capability = bindingByAction.get(actionId);
+    return Boolean(
+      settings?.class_b_enabled
+      && settings.enabled_game_actions.includes(actionId)
+      && capability?.ion_status === "ready"
+      && bridge.data?.available
+      && !bridge.data.emergency_disabled,
+    );
+  };
   const runnableWithoutInput = new Set([
     "get_operational_snapshot",
     "get_ship_state",
@@ -844,8 +915,8 @@ export function ComputerPage() {
     <div className="page wide computer-page">
       <PageHeader
         eyebrow="ION / Computer"
-        title="Computer policy and capability."
-        body="Configure the future assistant, exercise safe ION tools, and verify which Elite controls are actually bound. No game input is sent in this release."
+        title="Computer command and control."
+        body="Use deterministic typed commands or explicit one-shot Elite controls. Every action remains allowlisted, policy-gated, local, and auditable."
       />
       {status.data?.warnings.map((warning) => <Notice key={warning} tone="warning">{warning}</Notice>)}
 
@@ -886,6 +957,40 @@ export function ComputerPage() {
         </div>
       </section>
 
+      <section className="planner-panel command-console">
+        <div className="results-heading">
+          <div><span className="eyebrow">C5 / deterministic command mode</span><h2>Computer console</h2></div>
+          <span className="command-shortcut">Ctrl + Space</span>
+        </div>
+        <p className="muted">No language model is used. Supported phrases are matched locally and routed through the same audited tools as the manual controls.</p>
+        <div className="command-transcript" aria-live="polite">
+          {transcript.length === 0 && <p className="muted">Computer standing by. Select a suggestion or enter a supported command.</p>}
+          {transcript.map((entry, index) => (
+            <article key={`${entry.session_id}-${index}`}>
+              <div><span>COMMANDER</span><p>{entry.text}</p></div>
+              <div className={entry.clarification ? "clarification" : ""}><span>ION COMPUTER · {Math.round(entry.confidence * 100)}%</span><p>{entry.reply}</p></div>
+            </article>
+          ))}
+        </div>
+        <form className="command-entry" onSubmit={(event) => { event.preventDefault(); submitCommand(); }}>
+          <input
+            ref={commandInput}
+            value={commandText}
+            onChange={(event) => setCommandText(event.target.value)}
+            placeholder={settings?.enabled ? "Enter command…" : "Enable Command mode to begin"}
+            disabled={!settings?.enabled || settings.mode !== "command"}
+            aria-label="Computer command"
+          />
+          <button className="primary" type="submit" disabled={!commandText.trim() || command.isPending || !settings?.enabled || settings.mode !== "command"}><Send size={16} /> Execute</button>
+        </form>
+        <div className="command-suggestions">
+          {(transcript.at(-1)?.suggestions ?? ["Brief me", "Where am I?", "What is my next stop?", "Find a round trip within 100 ly", "Open route console"]).map((suggestion) => (
+            <button className="secondary" key={suggestion} disabled={!settings?.enabled || settings.mode !== "command" || command.isPending} onClick={() => submitCommand(suggestion)}>{suggestion}</button>
+          ))}
+        </div>
+        {command.error && <Notice tone="warning">{command.error.message}</Notice>}
+      </section>
+
       <section className="planner-panel computer-tool-console">
         <div className="results-heading"><div><span className="eyebrow">C2 / audited execution</span><h2>Safe ION tools</h2></div><Terminal size={24} /></div>
         <p className="muted">Every run passes through policy, uses structured arguments and results, and is written to the local audit log.</p>
@@ -924,9 +1029,42 @@ export function ComputerPage() {
         {bindings.data?.available && <p className="muted">Preset <strong>{bindings.data.preset}</strong> · {bindings.data.file_name} · devices: {bindings.data.device_kinds.join(", ") || "none"} · conflicts: {bindings.data.conflict_count}</p>}
 
         <div className="class-b-master">
-          <div><span className="eyebrow">Class B controls</span><h3>Prepare per-action permissions</h3><p>These switches only define future permissions. The Input Bridge is not installed, so ION cannot press a key or control Elite.</p></div>
+          <div><span className="eyebrow">Class B controls</span><h3>Per-action permissions</h3><p>Manual controls remain available when Computer mode is Off. Elite must be foreground and each action needs a conflict-free keyboard binding.</p></div>
           <label className="toggle"><input type="checkbox" checked={settings?.class_b_enabled ?? false} onChange={(event) => patch({ class_b_enabled: event.target.checked })} /><span className="switch">●</span>Class B master switch</label>
         </div>
+        <div className={`bridge-status ${bridge.data?.emergency_disabled ? "disabled" : bridge.data?.busy ? "busy" : ""}`}>
+          <div>
+            <span className="eyebrow">C4 / local Input Bridge</span>
+            <h3>{bridge.data?.emergency_disabled ? "EMERGENCY DISABLED" : bridge.data?.busy ? `EXECUTING ${bridge.data.active_action?.replaceAll("_", " ")}` : bridge.data?.available ? "READY FOR FOREGROUND CHECK" : "WINDOWS ONLY"}</h3>
+            <p>Emergency hotkey: {bridge.data?.emergency_hotkey ?? "Ctrl + Shift + Pause"}. ION never accepts a raw key or retries a timed-out toggle.</p>
+          </div>
+          <button className={bridge.data?.emergency_disabled ? "primary" : "secondary danger"} disabled={emergency.isPending} onClick={() => emergency.mutate(!bridge.data?.emergency_disabled)}>
+            <AlertOctagon size={16} /> {bridge.data?.emergency_disabled ? "Re-arm bridge" : "Emergency disable"}
+          </button>
+        </div>
+        <div className="manual-control-deck">
+          <ControlButton label="Gear down" ready={controlReady("landing_gear")} pending={manualInvoke.isPending} onClick={() => manualControl("set_ship_system", "landing_gear", true)} />
+          <ControlButton label="Gear up" ready={controlReady("landing_gear")} pending={manualInvoke.isPending} onClick={() => manualControl("set_ship_system", "landing_gear", false)} />
+          <ControlButton label="Scoop deploy" ready={controlReady("cargo_scoop")} pending={manualInvoke.isPending} onClick={() => manualControl("set_ship_system", "cargo_scoop", true)} />
+          <ControlButton label="Scoop retract" ready={controlReady("cargo_scoop")} pending={manualInvoke.isPending} onClick={() => manualControl("set_ship_system", "cargo_scoop", false)} />
+          <ControlButton label="Lights on" ready={controlReady("ship_lights")} pending={manualInvoke.isPending} onClick={() => manualControl("set_ship_system", "ship_lights", true)} />
+          <ControlButton label="Lights off" ready={controlReady("ship_lights")} pending={manualInvoke.isPending} onClick={() => manualControl("set_ship_system", "ship_lights", false)} />
+          <ControlButton label="Night vision on" ready={controlReady("night_vision")} pending={manualInvoke.isPending} onClick={() => manualControl("set_ship_system", "night_vision", true)} />
+          <ControlButton label="Night vision off" ready={controlReady("night_vision")} pending={manualInvoke.isPending} onClick={() => manualControl("set_ship_system", "night_vision", false)} />
+          <ControlButton label="Hardpoints deploy" ready={controlReady("hardpoints")} pending={manualInvoke.isPending} onClick={() => manualControl("set_ship_system", "hardpoints", true)} />
+          <ControlButton label="Hardpoints retract" ready={controlReady("hardpoints")} pending={manualInvoke.isPending} onClick={() => manualControl("set_ship_system", "hardpoints", false)} />
+          <ControlButton label="Galaxy map" ready={controlReady("galaxy_map")} pending={manualInvoke.isPending} onClick={() => manualControl("open_game_interface", "galaxy_map")} />
+          <ControlButton label="System map" ready={controlReady("system_map")} pending={manualInvoke.isPending} onClick={() => manualControl("open_game_interface", "system_map")} />
+          <ControlButton label="Navigation panel" ready={controlReady("navigation_panel")} pending={manualInvoke.isPending} onClick={() => manualControl("open_game_interface", "navigation_panel")} />
+          <ControlButton label="Communications" ready={controlReady("communications_panel")} pending={manualInvoke.isPending} onClick={() => manualControl("open_game_interface", "communications_panel")} />
+          <ControlButton label="Role panel" ready={controlReady("role_panel")} pending={manualInvoke.isPending} onClick={() => manualControl("open_game_interface", "role_panel")} />
+          <ControlButton label="Internal panel" ready={controlReady("internal_panel")} pending={manualInvoke.isPending} onClick={() => manualControl("open_game_interface", "internal_panel")} />
+          <ControlButton label="Balance power" ready={controlReady("power_balance")} pending={manualInvoke.isPending} onClick={() => manualControl("set_power_distribution", "power_balance")} />
+          <ControlButton label="Power to engines" ready={controlReady("power_engines")} pending={manualInvoke.isPending} onClick={() => manualControl("set_power_distribution", "power_engines")} />
+          <ControlButton label="Power to systems" ready={controlReady("power_systems")} pending={manualInvoke.isPending} onClick={() => manualControl("set_power_distribution", "power_systems")} />
+          <ControlButton label="Power to weapons" ready={controlReady("power_weapons")} pending={manualInvoke.isPending} onClick={() => manualControl("set_power_distribution", "power_weapons")} />
+        </div>
+        {manualInvoke.error && <Notice tone="warning">{manualInvoke.error.message}</Notice>}
         <div className="control-capabilities">
           {(controls.data ?? []).map((control) => {
             const capability = bindingByAction.get(control.action_id);
@@ -944,12 +1082,16 @@ export function ComputerPage() {
   );
 }
 
+function ControlButton({ label, ready, pending, onClick }: { label: string; ready: boolean; pending: boolean; onClick: () => void }) {
+  return <button className="control-button" disabled={!ready || pending} onClick={onClick}>{label}</button>;
+}
+
 function ControlCapabilityRow({ control, capability, enabled, onToggle }: { control: { action_id: string; label: string; permission: string; description: string }; capability?: BindingCapability; enabled: boolean; onToggle: (actionId: string, enabled: boolean) => void }) {
-  const binding = capability?.secondary ?? capability?.primary;
+  const binding = [capability?.secondary, capability?.primary].find((value) => value?.device_kind === "keyboard") ?? capability?.secondary ?? capability?.primary;
   return (
     <article className={`control-row ${control.permission === "game_amber" ? "amber" : "green"} ${capability?.status ?? "unbound"}`}>
       <label className="toggle"><input type="checkbox" checked={enabled} onChange={(event) => onToggle(control.action_id, event.target.checked)} /><span className="switch">●</span></label>
-      <div><span>{control.permission === "game_amber" ? "AMBER" : "GREEN"} · {capability?.status ?? "unbound"}</span><h3>{control.label}</h3><p>{control.description}</p></div>
+      <div><span>{control.permission === "game_amber" ? "AMBER" : "GREEN"} · {capability?.ion_status?.replaceAll("_", " ") ?? capability?.status ?? "unbound"}</span><h3>{control.label}</h3><p>{control.description}</p></div>
       <div className="binding-readout"><strong>{binding?.display ?? "No binding found"}</strong>{capability?.conflicts.length ? <small>Conflicts: {capability.conflicts.join(", ")}</small> : <small>{capability?.elite_binding ?? "Elite action not found"}</small>}</div>
     </article>
   );

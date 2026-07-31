@@ -51,6 +51,8 @@ from .schemas import (
     TransitRequest,
     PreferencesPayload,
     ComputerPreferences,
+    ComputerCommandInput,
+    ComputerManualControlInput,
     ComputerToolInvocationInput,
 )
 from .version import APP_VERSION
@@ -363,18 +365,27 @@ def reset_computer_settings(
 
 @router.get("/computer/status")
 def computer_status(session: Session = Depends(get_session)) -> dict:
+    from .input_bridge import input_bridge
+
     preferences = _load_preferences(session).computer
+    bridge_status = input_bridge.status()
     initial_tools = sum(tool.initial_release for tool in TOOL_DEFINITIONS)
     initial_controls = sum(control.initial_release for control in CONTROL_ACTIONS)
     return {
         "foundation_version": COMPUTER_FOUNDATION_VERSION,
         "settings": preferences.model_dump(mode="json"),
         "runtimes": {
-            "command": "policy_runtime",
+            "command": "deterministic_ready",
             "language_model": "not_configured",
             "speech_recognition": "not_configured",
             "text_to_speech": "not_configured",
-            "input_bridge": "not_installed",
+            "input_bridge": (
+                "emergency_disabled"
+                if bridge_status["emergency_disabled"]
+                else "windows_local_ready"
+                if bridge_status["available"]
+                else "windows_only"
+            ),
             "bindings": "discovery_available",
         },
         "catalog": {
@@ -386,8 +397,8 @@ def computer_status(session: Session = Depends(get_session)) -> dict:
         "execution_available": True,
         "executable_tools": sorted(EXECUTABLE_TOOL_NAMES),
         "warnings": [
-            "Command, Lite, Enhanced, speech, and game-input execution are not installed yet.",
-            "Class B settings and bindings are preparatory only; ION cannot send game inputs.",
+            "Lite, Enhanced, speech recognition, and speech output are not installed yet.",
+            "Game input remains disabled until Class B and each action are explicitly enabled.",
         ],
     }
 
@@ -418,6 +429,10 @@ def invoke_computer_tool(
     preferences = _load_preferences(session).computer
     try:
         source = InvocationSource(payload.source)
+        if source != InvocationSource.EXPLICIT_USER:
+            raise ValueError(
+                "Public tool requests must use explicit_user; manual controls use their dedicated endpoint."
+            )
         return invoke_tool(
             payload.tool_name,
             payload.arguments,
@@ -427,6 +442,73 @@ def invoke_computer_tool(
         )
     except (LookupError, ValueError) as exc:
         raise HTTPException(400, str(exc)) from exc
+
+
+@router.post("/computer/controls/execute")
+def execute_manual_computer_control(
+    payload: ComputerManualControlInput,
+    session: Session = Depends(get_session),
+) -> dict:
+    from .computer_runtime import invoke_tool
+
+    action = next(
+        (value for value in CONTROL_ACTIONS if value.action_id == payload.action_id),
+        None,
+    )
+    tool_name = {
+        "ship_system": "set_ship_system",
+        "game_interface": "open_game_interface",
+        "power": "set_power_distribution",
+    }.get(action.group if action else "")
+    if action is None or not action.initial_release or tool_name is None:
+        raise HTTPException(400, "Unknown or prohibited manual control action.")
+    arguments = {"action_id": action.action_id}
+    if payload.desired_state is not None:
+        arguments["desired_state"] = payload.desired_state
+    preferences = _load_preferences(session).computer
+    return invoke_tool(
+        tool_name,
+        arguments,
+        InvocationSource.MANUAL_CONTROL,
+        preferences,
+        timeout_seconds=payload.timeout_seconds,
+    )
+
+
+@router.post("/computer/commands")
+def run_computer_command(
+    payload: ComputerCommandInput,
+    session: Session = Depends(get_session),
+) -> dict:
+    from .computer_commands import execute_command
+
+    preferences = _load_preferences(session).computer
+    return execute_command(
+        payload.text,
+        preferences,
+        session_id=payload.session_id,
+    )
+
+
+@router.get("/computer/input-bridge")
+def computer_input_bridge_status() -> dict:
+    from .input_bridge import input_bridge
+
+    return input_bridge.status()
+
+
+@router.post("/computer/input-bridge/emergency-disable")
+def emergency_disable_computer_input_bridge() -> dict:
+    from .input_bridge import input_bridge
+
+    return input_bridge.emergency_disable()
+
+
+@router.post("/computer/input-bridge/reset")
+def reset_computer_input_bridge() -> dict:
+    from .input_bridge import input_bridge
+
+    return input_bridge.reset_emergency()
 
 
 class ComputerConfirmationInput(BaseModel):
@@ -480,6 +562,7 @@ def cancel_computer_invocation(invocation_id: str) -> dict:
 @router.get("/computer/bindings")
 def get_computer_bindings(session: Session = Depends(get_session)) -> dict:
     from .elite_bindings import binding_report, default_bindings_directory
+    from .input_bridge import input_bridge, keyboard_binding_supported
 
     configured = _load_preferences(session).computer.bindings_directory.strip()
     directory = (
@@ -487,7 +570,33 @@ def get_computer_bindings(session: Session = Depends(get_session)) -> dict:
         if configured
         else default_bindings_directory()
     )
-    return binding_report(directory)
+    report = binding_report(directory)
+    bridge_available = input_bridge.status()["available"]
+    for capability in report["capabilities"]:
+        has_keyboard = any(
+            slot and slot.get("device_kind") == "keyboard"
+            for slot in (capability.get("secondary"), capability.get("primary"))
+        )
+        keyboard_ready = any(
+            slot
+            and slot.get("device_kind") == "keyboard"
+            and keyboard_binding_supported(slot)
+            for slot in (capability.get("secondary"), capability.get("primary"))
+        )
+        capability["input_bridge_available"] = bridge_available and keyboard_ready
+        capability["ion_status"] = (
+            "conflict"
+            if capability["status"] == "conflict"
+            else "ready"
+            if keyboard_ready
+            else "unsupported_keyboard_binding"
+            if has_keyboard
+            else "requires_keyboard_binding"
+            if capability["status"] != "unbound"
+            else "unbound"
+        )
+    report["input_bridge_available"] = bridge_available
+    return report
 
 
 @router.get("/operations/active", response_model=ActiveOperationOutput | None)

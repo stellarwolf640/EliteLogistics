@@ -30,6 +30,9 @@ EXECUTABLE_TOOL_NAMES = frozenset(
         "change_search_filters",
         "show_information_card",
         "show_diagnostics",
+        "set_ship_system",
+        "open_game_interface",
+        "set_power_distribution",
     }
 )
 
@@ -248,7 +251,11 @@ def authorize_tool(
     tool = TOOLS_BY_NAME.get(tool_name)
     if tool is None:
         return AuthorizationResult(False, "Unknown Computer tool.")
-    if not preferences.enabled or preferences.mode == "off":
+    manual_game_control = (
+        source == InvocationSource.MANUAL_CONTROL
+        and tool.permission in (ToolPermission.GAME_GREEN, ToolPermission.GAME_AMBER)
+    )
+    if (not preferences.enabled or preferences.mode == "off") and not manual_game_control:
         return AuthorizationResult(False, "ION Computer is disabled.")
     if tool.requires_explicit_user and source == InvocationSource.PROACTIVE:
         return AuthorizationResult(False, "This tool requires an explicit commander action.")
@@ -292,7 +299,9 @@ def authorize_control_action(
     action = CONTROLS_BY_ID.get(action_id)
     if action is None:
         return AuthorizationResult(False, "Unknown or prohibited game-control action.")
-    if not preferences.enabled or preferences.mode == "off":
+    if (
+        not preferences.enabled or preferences.mode == "off"
+    ) and source != InvocationSource.MANUAL_CONTROL:
         return AuthorizationResult(False, "ION Computer is disabled.")
     if not preferences.class_b_enabled:
         return AuthorizationResult(False, "Class B game controls are disabled.")

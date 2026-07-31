@@ -16,6 +16,7 @@ from .api import router
 from .database import init_database
 from .elite_monitor import elite_monitor
 from .events import event_bus, state_snapshot
+from .input_bridge import input_bridge
 from .config import resource_path
 from .version import APP_VERSION
 
@@ -38,9 +39,11 @@ def create_app() -> FastAPI:
     async def lifespan(_: FastAPI):
         init_database()
         elite_monitor.start()
+        input_bridge.start()
         try:
             yield
         finally:
+            input_bridge.stop()
             elite_monitor.stop()
 
     app = FastAPI(title="ION API", version=APP_VERSION, lifespan=lifespan)
