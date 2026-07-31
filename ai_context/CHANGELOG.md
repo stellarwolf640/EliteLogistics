@@ -2,6 +2,21 @@
 
 This changelog records product and architectural changes that future agents need to understand. It is not limited to public release notes.
 
+## Unreleased — Computer foundation
+
+- Added `computer.py` as the provider-neutral source of truth for Computer
+  tools, Class B controls, invocation sources, and authorization decisions.
+- Added read-only Computer status, tool-catalogue, and control-catalogue APIs.
+- Migrated preferences from schema 2 to schema 3 with a nested, versioned
+  Computer record; Computer and game controls remain disabled by default.
+- Added Command, Lite, Enhanced, Automatic, and Off mode contracts without
+  selecting or bundling a model runtime.
+- Enforced explicit commander intent for game controls, per-action opt-in, and
+  confirmation for protected Amber actions.
+- Deliberately did not add speech, wake word, raw keyboard input, model
+  inference, or game-control execution.
+- Added the canonical `COMPUTER_DESIGN.md` and authorization regression tests.
+
 ## 0.2.3 — 2026-07-29
 
 ### Planning-form live data

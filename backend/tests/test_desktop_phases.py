@@ -27,6 +27,22 @@ def test_corrupt_preferences_fall_back_safely():
     assert value.close_behavior == "exit"
 
 
+def test_schema_two_preferences_migrate_to_computer_foundation():
+    value = _normalize_preferences(
+        {
+            "schema_version": 2,
+            "close_behavior": "tray",
+            "search_draft": {"origin_location_label": "Sol"},
+        }
+    )
+
+    assert value.schema_version == 3
+    assert value.close_behavior == "tray"
+    assert value.search_draft.origin_location_label == "Sol"
+    assert value.computer.enabled is False
+    assert value.computer.class_b_enabled is False
+
+
 def test_frozen_runtime_uses_clean_local_appdata_profile(tmp_path, monkeypatch):
     monkeypatch.delenv("ELITE_LOGISTICS_DATA_DIR", raising=False)
     monkeypatch.delenv("ELITE_LOGISTICS_DATABASE_URL", raising=False)

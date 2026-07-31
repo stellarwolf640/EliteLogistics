@@ -231,7 +231,7 @@ export interface WindowBounds {
 }
 
 export interface Preferences {
-  schema_version: 2;
+  schema_version: 3;
   search_draft: {
     origin_system_id64: string;
     origin_station_market_id: string;
@@ -263,6 +263,17 @@ export interface Preferences {
   elite_enabled: boolean;
   elite_journal_directory: string;
   elite_auto_apply_planning_state: boolean;
+  computer: {
+    schema_version: 1;
+    enabled: boolean;
+    mode: "off" | "command" | "lite" | "enhanced" | "automatic";
+    address_as_commander: boolean;
+    verbosity: "brief" | "standard" | "detailed" | "silent";
+    proactivity: "silent" | "critical" | "operational" | "conversational";
+    class_b_enabled: boolean;
+    enabled_game_actions: string[];
+    confirmation_policy: "always" | "recommended" | "minimal";
+  };
 }
 
 export interface ActiveOperation {

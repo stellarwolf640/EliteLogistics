@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 import os
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -12,6 +12,13 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from .config import get_settings
+from .computer import (
+    FOUNDATION_VERSION as COMPUTER_FOUNDATION_VERSION,
+    CONTROL_ACTIONS,
+    TOOL_DEFINITIONS,
+    control_catalog,
+    tool_catalog,
+)
 from .database import (
     ActiveOperation,
     DataImport,
@@ -51,9 +58,11 @@ DEFAULT_PREFERENCES = PreferencesPayload().model_dump(mode="json")
 
 def _normalize_preferences(values: dict | None) -> PreferencesPayload:
     values = values or {}
-    if values.get("schema_version") == 2:
+    if values.get("schema_version") in (2, 3):
+        migrated = {**values, "schema_version": 3}
+        migrated.setdefault("computer", {})
         try:
-            return PreferencesPayload.model_validate(values)
+            return PreferencesPayload.model_validate(migrated)
         except ValueError:
             return PreferencesPayload()
     # One-time compatibility for source/development profiles. Frozen builds use
@@ -83,9 +92,9 @@ def _save_preferences(session: Session, preferences: PreferencesPayload) -> Pref
     values = preferences.model_dump(mode="json")
     record = session.get(Preference, 1)
     if record is None:
-        session.add(Preference(id=1, schema_version=2, values=values))
+        session.add(Preference(id=1, schema_version=3, values=values))
     else:
-        record.schema_version = 2
+        record.schema_version = 3
         record.values = values
     session.commit()
     return preferences
@@ -321,6 +330,51 @@ def put_preferences(
     values: PreferencesPayload, session: Session = Depends(get_session)
 ) -> PreferencesPayload:
     return _save_preferences(session, values)
+
+
+@router.get("/computer/status")
+def computer_status(session: Session = Depends(get_session)) -> dict:
+    preferences = _load_preferences(session).computer
+    initial_tools = sum(tool.initial_release for tool in TOOL_DEFINITIONS)
+    initial_controls = sum(control.initial_release for control in CONTROL_ACTIONS)
+    return {
+        "foundation_version": COMPUTER_FOUNDATION_VERSION,
+        "settings": preferences.model_dump(mode="json"),
+        "runtimes": {
+            "command": "foundation",
+            "language_model": "not_configured",
+            "speech_recognition": "not_configured",
+            "text_to_speech": "not_configured",
+            "input_bridge": "not_configured",
+        },
+        "catalog": {
+            "tools": len(TOOL_DEFINITIONS),
+            "initial_tools": initial_tools,
+            "controls": len(CONTROL_ACTIONS),
+            "initial_controls": initial_controls,
+        },
+        "execution_available": False,
+        "warnings": [
+            "Computer tool execution is not enabled in this foundation release.",
+            "Class B game controls remain disabled until a binding-aware Input Bridge is implemented.",
+        ],
+    }
+
+
+@router.get("/computer/tools")
+def computer_tools(
+    category: Annotated[str | None, Query(max_length=60)] = None,
+) -> list[dict]:
+    tools = tool_catalog()
+    return [tool for tool in tools if category is None or tool["category"] == category]
+
+
+@router.get("/computer/controls")
+def computer_controls(
+    group: Annotated[str | None, Query(max_length=60)] = None,
+) -> list[dict]:
+    controls = control_catalog()
+    return [control for control in controls if group is None or control["group"] == group]
 
 
 @router.get("/operations/active", response_model=ActiveOperationOutput | None)

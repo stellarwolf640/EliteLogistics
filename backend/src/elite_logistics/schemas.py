@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 PadSize = Literal["S", "M", "L"]
@@ -217,8 +217,29 @@ class WindowBounds(BaseModel):
     maximized: bool = False
 
 
+class ComputerPreferences(BaseModel):
+    schema_version: Literal[1] = 1
+    enabled: bool = False
+    mode: Literal["off", "command", "lite", "enhanced", "automatic"] = "off"
+    address_as_commander: bool = True
+    verbosity: Literal["brief", "standard", "detailed", "silent"] = "standard"
+    proactivity: Literal["silent", "critical", "operational", "conversational"] = (
+        "critical"
+    )
+    class_b_enabled: bool = False
+    enabled_game_actions: list[str] = Field(default_factory=list, max_length=100)
+    confirmation_policy: Literal["always", "recommended", "minimal"] = "recommended"
+
+    @field_validator("enabled_game_actions")
+    @classmethod
+    def keep_allowlisted_actions(cls, values: list[str]) -> list[str]:
+        from .computer import CONTROLS_BY_ID
+
+        return list(dict.fromkeys(value for value in values if value in CONTROLS_BY_ID))
+
+
 class PreferencesPayload(BaseModel):
-    schema_version: Literal[2] = 2
+    schema_version: Literal[3] = 3
     search_draft: SearchDraftPreferences = Field(default_factory=SearchDraftPreferences)
     data_mode: Literal["live", "regional", "full"] = "live"
     close_behavior: Literal["exit", "tray"] = "exit"
@@ -232,6 +253,7 @@ class PreferencesPayload(BaseModel):
     elite_enabled: bool = False
     elite_journal_directory: str = Field(default="", max_length=1000)
     elite_auto_apply_planning_state: bool = False
+    computer: ComputerPreferences = Field(default_factory=ComputerPreferences)
 
 
 class ActiveOperationInput(BaseModel):

@@ -6,8 +6,9 @@ IntraStellar Operations Network. Read these files before changing code:
 1. `AI_README.md` — product intent, architectural rules, and working practices.
 2. `PROJECT_CONTENTS.md` — repository map, routes, APIs, data flow, and important files.
 3. `CHANGELOG.md` — implemented changes and current release state.
-4. `/ROADMAP.md` — planned release sequence.
-5. `/elite_logistics_initial_design.md` — original detailed design and mathematical assumptions.
+4. `COMPUTER_DESIGN.md` — agreed Computer capabilities, controls, and safety boundaries.
+5. `/ROADMAP.md` — planned release sequence.
+6. `/elite_logistics_initial_design.md` — original detailed design and mathematical assumptions.
 
 ## Product
 
@@ -228,5 +229,7 @@ Development launch:
 - The release signing private key is local/secret material and must exist as
   GitHub Actions secret `ION_UPDATE_SIGNING_KEY`; only its public key is committed.
 - Windows Snap Layout integration is deferred; normal native edge resizing works.
-- The future Linux service, accounts/company administration, other professions,
-  and local AI/voice assistant are intentionally not implemented in 0.2.0.
+- The future Linux service, accounts/company administration, and other
+  professions remain unimplemented.
+- Computer tool/control contracts and preferences exist, but model, voice,
+  wake-word, binding discovery, and game-input execution do not.

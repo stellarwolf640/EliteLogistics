@@ -29,6 +29,15 @@ ION is offered and produced by IntraStellar Logistics (ISL).
 - Route-engine performance work for large local datasets
 - Accessibility and keyboard-navigation audit of the custom frame
 
+## Unreleased — Computer foundation (implemented)
+
+- Versioned Computer preferences and Command/Lite/Enhanced mode contracts
+- Provider-neutral tool and Class B control catalogues
+- Read-only status/catalogue APIs
+- Default-deny authorization, explicit-intent enforcement, and confirmations
+- Canonical Computer capability and safety design
+- No model, voice, wake word, binding discovery, or game-input execution yet
+
 ## 0.3 — Relocation intelligence
 
 - Current-route versus target-route comparison
@@ -58,5 +67,7 @@ These remain product goals, not part of 0.2.0:
 - Optional ISL Linux service, accounts, company roles, job assignment, and statistics
 - Other profession modules, beginning only after their workflows are researched
 - A constrained local voice/command assistant using the same operation/event interfaces
+- Computer binding discovery, deterministic Command Mode, safe Input Bridge,
+  voice adapters, and optional local-model runtimes
 - Colonization logistics, passenger operations, exploration/exobiology, mining sales,
   Fleet Carrier support, and Community Goal logistics
