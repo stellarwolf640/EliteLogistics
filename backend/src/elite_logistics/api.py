@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,8 @@ from .config import get_settings
 from .computer import (
     FOUNDATION_VERSION as COMPUTER_FOUNDATION_VERSION,
     CONTROL_ACTIONS,
+    EXECUTABLE_TOOL_NAMES,
+    InvocationSource,
     TOOL_DEFINITIONS,
     control_catalog,
     tool_catalog,
@@ -48,6 +50,8 @@ from .schemas import (
     TradeSearchResponse,
     TransitRequest,
     PreferencesPayload,
+    ComputerPreferences,
+    ComputerToolInvocationInput,
 )
 from .version import APP_VERSION
 from .updater import update_service
@@ -332,6 +336,31 @@ def put_preferences(
     return _save_preferences(session, values)
 
 
+@router.put("/computer/settings", response_model=ComputerPreferences)
+def put_computer_settings(
+    values: ComputerPreferences, session: Session = Depends(get_session)
+) -> ComputerPreferences:
+    preferences = _load_preferences(session)
+    preferences.computer = values
+    _save_preferences(session, preferences)
+    event_bus.publish("computer.settings.changed", values.model_dump(mode="json"))
+    return values
+
+
+@router.post("/computer/settings/reset", response_model=ComputerPreferences)
+def reset_computer_settings(
+    session: Session = Depends(get_session),
+) -> ComputerPreferences:
+    preferences = _load_preferences(session)
+    preferences.computer = ComputerPreferences()
+    _save_preferences(session, preferences)
+    event_bus.publish(
+        "computer.settings.changed",
+        preferences.computer.model_dump(mode="json"),
+    )
+    return preferences.computer
+
+
 @router.get("/computer/status")
 def computer_status(session: Session = Depends(get_session)) -> dict:
     preferences = _load_preferences(session).computer
@@ -341,11 +370,12 @@ def computer_status(session: Session = Depends(get_session)) -> dict:
         "foundation_version": COMPUTER_FOUNDATION_VERSION,
         "settings": preferences.model_dump(mode="json"),
         "runtimes": {
-            "command": "foundation",
+            "command": "policy_runtime",
             "language_model": "not_configured",
             "speech_recognition": "not_configured",
             "text_to_speech": "not_configured",
-            "input_bridge": "not_configured",
+            "input_bridge": "not_installed",
+            "bindings": "discovery_available",
         },
         "catalog": {
             "tools": len(TOOL_DEFINITIONS),
@@ -353,10 +383,11 @@ def computer_status(session: Session = Depends(get_session)) -> dict:
             "controls": len(CONTROL_ACTIONS),
             "initial_controls": initial_controls,
         },
-        "execution_available": False,
+        "execution_available": True,
+        "executable_tools": sorted(EXECUTABLE_TOOL_NAMES),
         "warnings": [
-            "Computer tool execution is not enabled in this foundation release.",
-            "Class B game controls remain disabled until a binding-aware Input Bridge is implemented.",
+            "Command, Lite, Enhanced, speech, and game-input execution are not installed yet.",
+            "Class B settings and bindings are preparatory only; ION cannot send game inputs.",
         ],
     }
 
@@ -375,6 +406,88 @@ def computer_controls(
 ) -> list[dict]:
     controls = control_catalog()
     return [control for control in controls if group is None or control["group"] == group]
+
+
+@router.post("/computer/tools/invoke")
+def invoke_computer_tool(
+    payload: ComputerToolInvocationInput,
+    session: Session = Depends(get_session),
+) -> dict:
+    from .computer_runtime import invoke_tool
+
+    preferences = _load_preferences(session).computer
+    try:
+        source = InvocationSource(payload.source)
+        return invoke_tool(
+            payload.tool_name,
+            payload.arguments,
+            source,
+            preferences,
+            timeout_seconds=payload.timeout_seconds,
+        )
+    except (LookupError, ValueError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+class ComputerConfirmationInput(BaseModel):
+    approve: bool
+    timeout_seconds: float = Field(default=5, ge=0.1, le=30)
+
+
+@router.post("/computer/confirmations/{confirmation_id}")
+def resolve_computer_confirmation(
+    confirmation_id: str,
+    payload: ComputerConfirmationInput,
+    session: Session = Depends(get_session),
+) -> dict:
+    from .computer_runtime import resolve_confirmation
+
+    preferences = _load_preferences(session).computer
+    try:
+        return resolve_confirmation(
+            confirmation_id,
+            preferences,
+            approve=payload.approve,
+            timeout_seconds=payload.timeout_seconds,
+        )
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.get("/computer/invocations")
+def get_computer_invocations(
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> list[dict]:
+    from .computer_runtime import recent_invocations
+
+    return recent_invocations(limit)
+
+
+@router.post("/computer/invocations/{invocation_id}/cancel")
+def cancel_computer_invocation(invocation_id: str) -> dict:
+    from .computer_runtime import cancel_invocation
+
+    try:
+        return cancel_invocation(invocation_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.get("/computer/bindings")
+def get_computer_bindings(session: Session = Depends(get_session)) -> dict:
+    from .elite_bindings import binding_report, default_bindings_directory
+
+    configured = _load_preferences(session).computer.bindings_directory.strip()
+    directory = (
+        Path(configured).expanduser().resolve()
+        if configured
+        else default_bindings_directory()
+    )
+    return binding_report(directory)
 
 
 @router.get("/operations/active", response_model=ActiveOperationOutput | None)

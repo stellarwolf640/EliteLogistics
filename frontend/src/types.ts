@@ -273,7 +273,92 @@ export interface Preferences {
     class_b_enabled: boolean;
     enabled_game_actions: string[];
     confirmation_policy: "always" | "recommended" | "minimal";
+    bindings_directory: string;
   };
+}
+
+export type ComputerPreferences = Preferences["computer"];
+
+export interface ComputerTool {
+  name: string;
+  category: string;
+  description: string;
+  permission: "read" | "ion" | "game_green" | "game_amber" | "confirm";
+  initial_release: boolean;
+  requires_explicit_user: boolean;
+  requires_confirmation: boolean;
+  proactive_allowed: boolean;
+  implementation_status: "contract_only" | "available";
+}
+
+export interface ComputerControl {
+  action_id: string;
+  group: string;
+  label: string;
+  permission: "game_green" | "game_amber";
+  desired_state: boolean;
+  verifiable: boolean;
+  initial_release: boolean;
+  description: string;
+}
+
+export interface ComputerStatus {
+  foundation_version: number;
+  settings: ComputerPreferences;
+  runtimes: Record<string, string>;
+  catalog: {
+    tools: number;
+    initial_tools: number;
+    controls: number;
+    initial_controls: number;
+  };
+  execution_available: boolean;
+  executable_tools: string[];
+  warnings: string[];
+}
+
+export interface ComputerInvocation {
+  id: string;
+  tool_name: string;
+  source: string;
+  status: "queued" | "running" | "completed" | "failed" | "timed_out" | "denied" | "awaiting_confirmation" | "canceled" | "expired";
+  arguments: Record<string, unknown>;
+  result: Record<string, unknown> | null;
+  error: string | null;
+  confirmation_id: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface BindingSlot {
+  device: string;
+  device_kind: "keyboard" | "mouse" | "controller" | "hotas" | "unknown";
+  key: string;
+  modifiers: string[];
+  display: string;
+}
+
+export interface BindingCapability {
+  action_id: string;
+  label: string;
+  elite_binding: string | null;
+  primary: BindingSlot | null;
+  secondary: BindingSlot | null;
+  status: "ready" | "unbound" | "conflict";
+  conflicts: string[];
+}
+
+export interface BindingReport {
+  available: boolean;
+  configured_directory: string;
+  file_name: string | null;
+  preset: string | null;
+  major_version?: string | null;
+  minor_version?: string | null;
+  capabilities: BindingCapability[];
+  device_kinds: string[];
+  conflict_count: number;
+  warning: string | null;
 }
 
 export interface ActiveOperation {

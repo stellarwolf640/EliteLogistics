@@ -44,6 +44,14 @@ class EliteMonitor:
 
     def _run(self) -> None:
         while not self._stop.wait(self.interval_seconds):
+            try:
+                from .elite_bindings import elite_bindings_monitor
+
+                elite_bindings_monitor.scan_once()
+            except Exception as exc:
+                event_bus.publish(
+                    "computer.bindings.changed", {"available": False, "error": str(exc)}
+                )
             if self.paused:
                 continue
             try:

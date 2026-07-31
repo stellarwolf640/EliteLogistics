@@ -12,6 +12,11 @@ import {
   Wrench,
   X,
   Settings,
+  Bot,
+  Keyboard,
+  ShieldCheck,
+  RotateCcw,
+  Terminal,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "./api";
@@ -26,7 +31,7 @@ import {
   formatCredits,
   formatTime,
 } from "./components";
-import type { EliteStatus, ImmersiveTradeRoute, JobResponse, Preferences, RoundTrip, SearchDraft, ShipProfile, TradeLeg, TransitResult, TransitSummary } from "./types";
+import type { BindingCapability, ComputerInvocation, ComputerPreferences, EliteStatus, ImmersiveTradeRoute, JobResponse, Preferences, RoundTrip, SearchDraft, ShipProfile, TradeLeg, TransitResult, TransitSummary } from "./types";
 import { useSearchDraft } from "./useSearchDraft";
 import { optimizeShip, SHIP_CATALOG, type OptimizationMode } from "./shipCatalog";
 import { connectQueryEvents } from "./events";
@@ -44,6 +49,7 @@ const routeLabels: Record<string, string[]> = {
   "/ships": ["HOME", "FLEET MANAGEMENT", "SHIP PROFILES"],
   "/ship-optimizations": ["HOME", "FLEET MANAGEMENT", "SHIP OPTIMIZATIONS"],
   "/data": ["HOME", "DATA NETWORK"],
+  "/computer": ["HOME", "COMPUTER"],
   "/settings": ["HOME", "ION SETTINGS"],
 };
 
@@ -59,6 +65,7 @@ const breadcrumbTargets: Record<string, string> = {
   "SHIP PROFILES": "/ships",
   "SHIP OPTIMIZATIONS": "/ship-optimizations",
   "DATA NETWORK": "/data",
+  COMPUTER: "/computer",
   "ION SETTINGS": "/settings",
 };
 
@@ -79,8 +86,35 @@ export default function App() {
   const path = usePath();
   const { draft, setDraft } = useSearchDraft();
   const queryClient = useQueryClient();
+  const [computerCard, setComputerCard] = useState<{ title: string; body: string; tone: string } | null>(null);
   useEffect(() => connectQueryEvents(queryClient), [queryClient]);
   const update = (patch: Partial<SearchDraft>) => setDraft((current) => ({ ...current, ...patch }));
+  useEffect(() => {
+    const handle = (event: Event) => {
+      const detail = (event as CustomEvent).detail as {
+        action?: string;
+        path?: string;
+        fields?: Partial<SearchDraft>;
+        filters?: Partial<SearchDraft>;
+        title?: string;
+        body?: string;
+        tone?: string;
+      };
+      if (detail.action === "navigate" && detail.path) navigateTo(detail.path);
+      if (detail.action === "open_route_console") void desktopCall("open_route_console");
+      if (detail.action === "populate_planner" && detail.fields) update(detail.fields);
+      if (detail.action === "change_filters" && detail.filters) update(detail.filters);
+      if (detail.action === "show_information_card" && detail.body) {
+        setComputerCard({
+          title: detail.title || "Computer",
+          body: detail.body,
+          tone: detail.tone || "information",
+        });
+      }
+    };
+    window.addEventListener("ion:computer-interface", handle);
+    return () => window.removeEventListener("ion:computer-interface", handle);
+  }, []);
   const status = useQuery({ queryKey: ["data-status"], queryFn: api.dataStatus });
   const elite = useQuery({
     queryKey: ["elite-status"],
@@ -118,8 +152,17 @@ export default function App() {
         {path === "/ships" && <ShipsPage draft={draft} update={update} />}
         {path === "/ship-optimizations" && <ShipOptimizationsPage draft={draft} update={update} />}
         {path === "/data" && <DataPage draft={draft} update={update} />}
+        {path === "/computer" && <ComputerPage />}
         {path === "/settings" && <SettingsPage />}
         {!routeLabels[path] && <Dashboard status={status.data} draft={draft} />}
+        {computerCard && (
+          <aside className={`computer-information-card ${computerCard.tone}`}>
+            <span className="eyebrow">ION Computer</span>
+            <h2>{computerCard.title}</h2>
+            <p>{computerCard.body}</p>
+            <button className="secondary" onClick={() => setComputerCard(null)}>Dismiss</button>
+          </aside>
+        )}
       </main>
     </div>
   );
@@ -250,7 +293,8 @@ function Dashboard({ status, draft, elite }: { status?: Awaited<ReturnType<typeo
         <ServiceTile index="02" icon={Route} title="Navigation" body="Plan direct and profitable travel across populated space." meta="1 SERVICE" onClick={() => navigate("/navigation")} />
         <ServiceTile index="03" icon={Ship} title="Fleet Management" body="Store ship profiles and plan complete role-specific module loadouts." meta="2 SERVICES" onClick={() => navigate("/fleet")} />
         <ServiceTile index="04" icon={Database} title="Data Network" body="Control live, regional, and full-galaxy market coverage." meta={`${status?.market_observations.toLocaleString() ?? 0} RECORDS`} onClick={() => navigate("/data")} />
-        <ServiceTile index="05" icon={Settings} title="ION Settings" body="Desktop behavior, route-console display, updates, and local diagnostics." meta="SYSTEM CONTROL" onClick={() => navigate("/settings")} />
+        <ServiceTile index="05" icon={Bot} title="Computer" body="Configure Computer policy, inspect Elite bindings, and run safe ION awareness tools." meta="COMMAND FOUNDATION" onClick={() => navigate("/computer")} featured />
+        <ServiceTile index="06" icon={Settings} title="ION Settings" body="Desktop behavior, route-console display, updates, and local diagnostics." meta="SYSTEM CONTROL" onClick={() => navigate("/settings")} />
       </section>
     </div>
   );
@@ -709,6 +753,205 @@ function DataPage({ draft, update }: { draft: SearchDraft; update: (patch: Parti
       {mode === "live" && <Notice>Live lookup is active. Searches request fresh regional candidates only when needed and retain a small local cache for repeat use.</Notice>}
       <Notice>Community market data can change before you arrive. Confidence is reduced using observation age, supply, demand, and estimated arrival time.</Notice>
     </div>
+  );
+}
+
+export function ComputerPage() {
+  const queryClient = useQueryClient();
+  const status = useQuery({ queryKey: ["computer-status"], queryFn: api.computerStatus });
+  const tools = useQuery({ queryKey: ["computer-tools"], queryFn: api.computerTools });
+  const controls = useQuery({ queryKey: ["computer-controls"], queryFn: api.computerControls });
+  const bindings = useQuery({ queryKey: ["computer-bindings"], queryFn: api.computerBindings });
+  const invocations = useQuery({ queryKey: ["computer-invocations"], queryFn: api.computerInvocations });
+  const [result, setResult] = useState<ComputerInvocation | null>(null);
+  const [bindingsDirectory, setBindingsDirectory] = useState("");
+  const save = useMutation({
+    mutationFn: api.updateComputerSettings,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["computer-status"] });
+      void queryClient.invalidateQueries({ queryKey: ["preferences"] });
+      void queryClient.invalidateQueries({ queryKey: ["computer-bindings"] });
+    },
+  });
+  const reset = useMutation({
+    mutationFn: api.resetComputerSettings,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["computer-status"] });
+      void queryClient.invalidateQueries({ queryKey: ["preferences"] });
+      void queryClient.invalidateQueries({ queryKey: ["computer-bindings"] });
+    },
+  });
+  const invoke = useMutation({
+    mutationFn: ({ name, args = {} }: { name: string; args?: Record<string, unknown> }) =>
+      api.invokeComputerTool(name, args),
+    onSuccess: (value) => {
+      setResult(value);
+      void queryClient.invalidateQueries({ queryKey: ["computer-invocations"] });
+    },
+  });
+  const resolve = useMutation({
+    mutationFn: ({ id, approve }: { id: string; approve: boolean }) =>
+      api.resolveComputerConfirmation(id, approve),
+    onSuccess: (value) => {
+      setResult(value);
+      void queryClient.invalidateQueries({ queryKey: ["computer-invocations"] });
+    },
+  });
+  const settings = status.data?.settings;
+  useEffect(() => {
+    if (settings) setBindingsDirectory(settings.bindings_directory);
+  }, [settings?.bindings_directory]);
+  const patch = (change: Partial<ComputerPreferences>) => {
+    if (settings) save.mutate({ ...settings, ...change });
+  };
+  const setMode = (mode: ComputerPreferences["mode"]) => {
+    patch({ mode, enabled: mode !== "off" });
+  };
+  const toggleAction = (actionId: string, enabled: boolean) => {
+    if (!settings) return;
+    const actions = enabled
+      ? [...new Set([...settings.enabled_game_actions, actionId])]
+      : settings.enabled_game_actions.filter((value) => value !== actionId);
+    patch({ enabled_game_actions: actions });
+  };
+  const runArguments: Record<string, Record<string, unknown>> = {
+    open_ion_view: { view: "home" },
+    show_information_card: {
+      title: "Computer link test",
+      body: "The policy-gated ION interface channel is responding.",
+      tone: "success",
+    },
+  };
+  const bindingByAction = new globalThis.Map<string, BindingCapability>(
+    (bindings.data?.capabilities ?? []).map((capability) => [capability.action_id, capability]),
+  );
+  const runnableWithoutInput = new Set([
+    "get_operational_snapshot",
+    "get_ship_state",
+    "get_navigation_state",
+    "get_cargo_manifest",
+    "get_control_capabilities",
+    "inspect_current_system",
+    "get_active_operation",
+    "get_next_instruction",
+    "open_route_console",
+    "show_diagnostics",
+    "open_ion_view",
+    "show_information_card",
+  ]);
+
+  return (
+    <div className="page wide computer-page">
+      <PageHeader
+        eyebrow="ION / Computer"
+        title="Computer policy and capability."
+        body="Configure the future assistant, exercise safe ION tools, and verify which Elite controls are actually bound. No game input is sent in this release."
+      />
+      {status.data?.warnings.map((warning) => <Notice key={warning} tone="warning">{warning}</Notice>)}
+
+      <section className="planner-panel computer-settings">
+        <div className="results-heading">
+          <div><span className="eyebrow">C1 / runtime policy</span><h2>Computer settings</h2></div>
+          <button className="secondary" disabled={reset.isPending} onClick={() => reset.mutate()}><RotateCcw size={16} /> Reset safe defaults</button>
+        </div>
+        <div className="computer-settings-grid">
+          <label className="field"><span>Operating mode</span>
+            <select value={settings?.mode ?? "off"} onChange={(event) => setMode(event.target.value as ComputerPreferences["mode"])}>
+              <option value="off">Off</option>
+              <option value="command">Command foundation · tool console</option>
+              <option value="lite" disabled>Lite · not installed</option>
+              <option value="enhanced" disabled>Enhanced · not installed</option>
+              <option value="automatic" disabled>Automatic · not installed</option>
+            </select>
+          </label>
+          <label className="field"><span>Response detail</span>
+            <select value={settings?.verbosity ?? "standard"} onChange={(event) => patch({ verbosity: event.target.value as ComputerPreferences["verbosity"] })}>
+              <option value="brief">Brief</option><option value="standard">Standard</option><option value="detailed">Detailed</option><option value="silent">Silent</option>
+            </select>
+          </label>
+          <label className="field"><span>Proactivity</span>
+            <select value={settings?.proactivity ?? "critical"} onChange={(event) => patch({ proactivity: event.target.value as ComputerPreferences["proactivity"] })}>
+              <option value="silent">Silent</option><option value="critical">Critical only</option><option value="operational">Operational</option><option value="conversational">Conversational</option>
+            </select>
+          </label>
+          <label className="field"><span>Confirmation policy</span>
+            <select value={settings?.confirmation_policy ?? "recommended"} onChange={(event) => patch({ confirmation_policy: event.target.value as ComputerPreferences["confirmation_policy"] })}>
+              <option value="always">Always confirm controls</option><option value="recommended">Recommended</option><option value="minimal">Minimal</option>
+            </select>
+          </label>
+        </div>
+        <label className="toggle"><input type="checkbox" checked={settings?.address_as_commander ?? true} onChange={(event) => patch({ address_as_commander: event.target.checked })} /><span className="switch">●</span>Address me as Commander</label>
+        <div className="runtime-strip">
+          {Object.entries(status.data?.runtimes ?? {}).map(([name, value]) => <div key={name}><span>{name.replaceAll("_", " ")}</span><strong>{value.replaceAll("_", " ")}</strong></div>)}
+        </div>
+      </section>
+
+      <section className="planner-panel computer-tool-console">
+        <div className="results-heading"><div><span className="eyebrow">C2 / audited execution</span><h2>Safe ION tools</h2></div><Terminal size={24} /></div>
+        <p className="muted">Every run passes through policy, uses structured arguments and results, and is written to the local audit log.</p>
+        <div className="computer-tools">
+          {(tools.data ?? []).map((tool) => (
+            <article key={tool.name} className={tool.implementation_status === "available" ? "available" : ""}>
+              <div><span>{tool.category} · {tool.permission}</span><h3>{tool.name.replaceAll("_", " ")}</h3><p>{tool.description}</p></div>
+              <button
+                className="secondary"
+                disabled={!settings?.enabled || tool.implementation_status !== "available" || !runnableWithoutInput.has(tool.name) || invoke.isPending}
+                onClick={() => invoke.mutate({ name: tool.name, args: runArguments[tool.name] })}
+              >{tool.implementation_status === "available" ? "Run" : "Planned"}</button>
+            </article>
+          ))}
+        </div>
+        {invoke.error && <Notice tone="warning">{invoke.error.message}</Notice>}
+        {result && (
+          <div className={`computer-result ${result.status}`}>
+            <div className="results-heading"><div><span className="eyebrow">Latest invocation</span><h3>{result.tool_name.replaceAll("_", " ")}</h3></div><strong>{result.status.replaceAll("_", " ")}</strong></div>
+            {result.error && <Notice tone="warning">{result.error}</Notice>}
+            {result.confirmation_id && result.status === "awaiting_confirmation" && <div className="confirmation-actions"><button className="primary" onClick={() => resolve.mutate({ id: result.confirmation_id!, approve: true })}>Confirm</button><button className="secondary" onClick={() => resolve.mutate({ id: result.confirmation_id!, approve: false })}>Reject</button></div>}
+            {result.result && <pre>{JSON.stringify(result.result, null, 2)}</pre>}
+          </div>
+        )}
+      </section>
+
+      <section className="planner-panel bindings-panel">
+        <div className="results-heading"><div><span className="eyebrow">C3 / read-only discovery</span><h2>Elite control bindings</h2></div><Keyboard size={24} /></div>
+        <div className="path-picker">
+          <input value={bindingsDirectory} onChange={(event) => setBindingsDirectory(event.target.value)} placeholder="Default Elite Options\\Bindings folder" />
+          <button className="secondary" onClick={() => void desktopCall<string>("choose_bindings_folder").then((path) => path && setBindingsDirectory(path))}>Browse…</button>
+          <button className="secondary" disabled={!settings || save.isPending} onClick={() => patch({ bindings_directory: bindingsDirectory })}>Apply</button>
+          <button className="secondary" onClick={() => void bindings.refetch()}><RefreshCw size={16} /> Refresh</button>
+        </div>
+        {bindings.data?.warning && <Notice tone="warning">{bindings.data.warning}</Notice>}
+        {bindings.data?.available && <p className="muted">Preset <strong>{bindings.data.preset}</strong> · {bindings.data.file_name} · devices: {bindings.data.device_kinds.join(", ") || "none"} · conflicts: {bindings.data.conflict_count}</p>}
+
+        <div className="class-b-master">
+          <div><span className="eyebrow">Class B controls</span><h3>Prepare per-action permissions</h3><p>These switches only define future permissions. The Input Bridge is not installed, so ION cannot press a key or control Elite.</p></div>
+          <label className="toggle"><input type="checkbox" checked={settings?.class_b_enabled ?? false} onChange={(event) => patch({ class_b_enabled: event.target.checked })} /><span className="switch">●</span>Class B master switch</label>
+        </div>
+        <div className="control-capabilities">
+          {(controls.data ?? []).map((control) => {
+            const capability = bindingByAction.get(control.action_id);
+            return <ControlCapabilityRow key={control.action_id} control={control} capability={capability} enabled={settings?.enabled_game_actions.includes(control.action_id) ?? false} onToggle={toggleAction} />;
+          })}
+        </div>
+      </section>
+
+      <section className="planner-panel audit-panel">
+        <div className="results-heading"><div><span className="eyebrow">Local audit</span><h2>Recent invocations</h2></div><ShieldCheck size={24} /></div>
+        {(invocations.data ?? []).length === 0 && <p className="muted">No Computer tools have been invoked.</p>}
+        {(invocations.data ?? []).map((invocation) => <div className="audit-row" key={invocation.id}><span>{new Date(invocation.created_at).toLocaleTimeString()}</span><strong>{invocation.tool_name.replaceAll("_", " ")}</strong><b>{invocation.status.replaceAll("_", " ")}</b></div>)}
+      </section>
+    </div>
+  );
+}
+
+function ControlCapabilityRow({ control, capability, enabled, onToggle }: { control: { action_id: string; label: string; permission: string; description: string }; capability?: BindingCapability; enabled: boolean; onToggle: (actionId: string, enabled: boolean) => void }) {
+  const binding = capability?.secondary ?? capability?.primary;
+  return (
+    <article className={`control-row ${control.permission === "game_amber" ? "amber" : "green"} ${capability?.status ?? "unbound"}`}>
+      <label className="toggle"><input type="checkbox" checked={enabled} onChange={(event) => onToggle(control.action_id, event.target.checked)} /><span className="switch">●</span></label>
+      <div><span>{control.permission === "game_amber" ? "AMBER" : "GREEN"} · {capability?.status ?? "unbound"}</span><h3>{control.label}</h3><p>{control.description}</p></div>
+      <div className="binding-readout"><strong>{binding?.display ?? "No binding found"}</strong>{capability?.conflicts.length ? <small>Conflicts: {capability.conflicts.join(", ")}</small> : <small>{capability?.elite_binding ?? "Elite action not found"}</small>}</div>
+    </article>
   );
 }
 

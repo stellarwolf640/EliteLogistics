@@ -12,6 +12,12 @@ import type {
   ActiveOperation,
   Diagnostics,
   UpdateStatus,
+  ComputerPreferences,
+  ComputerStatus,
+  ComputerTool,
+  ComputerControl,
+  ComputerInvocation,
+  BindingReport,
 } from "./types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -46,6 +52,25 @@ export const api = {
   eliteStatus: () => request<EliteStatus>("/api/elite/status"),
   updateEliteSettings: (payload: { enabled: boolean; journal_directory: string; auto_apply_planning_state: boolean }) =>
     request<EliteStatus>("/api/elite/settings", { method: "PUT", body: JSON.stringify(payload) }),
+  computerStatus: () => request<ComputerStatus>("/api/computer/status"),
+  computerTools: () => request<ComputerTool[]>("/api/computer/tools"),
+  computerControls: () => request<ComputerControl[]>("/api/computer/controls"),
+  updateComputerSettings: (payload: ComputerPreferences) =>
+    request<ComputerPreferences>("/api/computer/settings", { method: "PUT", body: JSON.stringify(payload) }),
+  resetComputerSettings: () =>
+    request<ComputerPreferences>("/api/computer/settings/reset", { method: "POST" }),
+  computerBindings: () => request<BindingReport>("/api/computer/bindings"),
+  computerInvocations: () => request<ComputerInvocation[]>("/api/computer/invocations?limit=30"),
+  invokeComputerTool: (tool_name: string, args: Record<string, unknown> = {}) =>
+    request<ComputerInvocation>("/api/computer/tools/invoke", {
+      method: "POST",
+      body: JSON.stringify({ tool_name, arguments: args, source: "explicit_user", timeout_seconds: 5 }),
+    }),
+  resolveComputerConfirmation: (confirmationId: string, approve: boolean) =>
+    request<ComputerInvocation>(`/api/computer/confirmations/${confirmationId}`, {
+      method: "POST",
+      body: JSON.stringify({ approve, timeout_seconds: 5 }),
+    }),
   packInfo: () => request<{ url: string; bytes: number; available: boolean; error?: string }>("/api/data/spansh-pack-info"),
   locations: (query: string) =>
     request<LocationResult[]>(`/api/locations/search?q=${encodeURIComponent(query)}&limit=12`),

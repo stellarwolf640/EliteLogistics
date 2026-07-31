@@ -1,10 +1,34 @@
-from elite_logistics.api import computer_controls, computer_status, computer_tools
+import time
+from pathlib import Path
+
+from sqlalchemy.orm import sessionmaker
+
+from elite_logistics.api import (
+    computer_controls,
+    computer_status,
+    computer_tools,
+    put_computer_settings,
+    reset_computer_settings,
+)
 from elite_logistics.computer import (
     CONTROL_ACTIONS,
     TOOL_DEFINITIONS,
     InvocationSource,
     authorize_control_action,
     authorize_tool,
+)
+from elite_logistics.computer_runtime import (
+    HANDLERS,
+    cancel_invocation,
+    invoke_tool,
+    resolve_confirmation,
+)
+from elite_logistics.database import ComputerInvocation
+from elite_logistics.elite_bindings import (
+    binding_report,
+    EliteBindingsMonitor,
+    locate_active_bindings,
+    parse_bindings_file,
 )
 from elite_logistics.schemas import ComputerPreferences
 
@@ -109,14 +133,207 @@ def test_game_tool_cannot_be_invoked_proactively():
     assert "explicit" in result.reason.casefold()
 
 
-def test_foundation_apis_expose_contracts_without_execution(session):
+def test_computer_apis_expose_executable_and_planned_contracts(session):
     status = computer_status(session)
     tools = computer_tools()
     controls = computer_controls()
 
     assert status["foundation_version"] == 1
-    assert status["execution_available"] is False
+    assert status["execution_available"] is True
     assert status["catalog"]["tools"] == len(tools)
     assert status["catalog"]["controls"] == len(controls)
-    assert all(tool["implementation_status"] == "contract_only" for tool in tools)
+    assert any(tool["implementation_status"] == "available" for tool in tools)
+    assert any(tool["implementation_status"] == "contract_only" for tool in tools)
     assert any(control["action_id"] == "landing_gear" for control in controls)
+
+
+def test_computer_settings_persist_and_reset_to_safe_defaults(session):
+    configured = ComputerPreferences(
+        enabled=True,
+        mode="command",
+        class_b_enabled=True,
+        enabled_game_actions=["landing_gear"],
+        bindings_directory="C:/Elite/Bindings",
+    )
+
+    assert put_computer_settings(configured, session).enabled is True
+    reset = reset_computer_settings(session)
+
+    assert reset.enabled is False
+    assert reset.mode == "off"
+    assert reset.class_b_enabled is False
+    assert reset.enabled_game_actions == []
+    assert computer_status(session)["settings"]["enabled"] is False
+
+
+def _runtime_factory(session, monkeypatch):
+    factory = sessionmaker(bind=session.get_bind(), expire_on_commit=False)
+    monkeypatch.setattr("elite_logistics.computer_runtime.SessionLocal", factory)
+    return factory
+
+
+def test_safe_tool_execution_is_audited_and_proactive_user_tools_are_denied(
+    session, monkeypatch
+):
+    _runtime_factory(session, monkeypatch)
+    preferences = ComputerPreferences(enabled=True, mode="command")
+
+    completed = invoke_tool(
+        "show_information_card",
+        {"title": "Test", "body": "Safe structured message."},
+        InvocationSource.EXPLICIT_USER,
+        preferences,
+    )
+    denied = invoke_tool(
+        "open_route_console",
+        {},
+        InvocationSource.PROACTIVE,
+        preferences,
+    )
+
+    assert completed["status"] == "completed"
+    assert completed["result"]["action"] == "show_information_card"
+    assert denied["status"] == "denied"
+    assert "proactive" in denied["error"].casefold()
+    assert session.query(ComputerInvocation).count() == 2
+
+
+def test_tool_timeout_returns_explicit_failure(session, monkeypatch):
+    _runtime_factory(session, monkeypatch)
+    preferences = ComputerPreferences(enabled=True, mode="command")
+    original = HANDLERS["get_operational_snapshot"]
+
+    def slow_handler(_arguments):
+        time.sleep(0.05)
+        return {"late": True}
+
+    HANDLERS["get_operational_snapshot"] = slow_handler
+    try:
+        result = invoke_tool(
+            "get_operational_snapshot",
+            {},
+            InvocationSource.EXPLICIT_USER,
+            preferences,
+            timeout_seconds=0.01,
+        )
+    finally:
+        HANDLERS["get_operational_snapshot"] = original
+
+    assert result["status"] == "timed_out"
+    assert "exceeded" in result["error"]
+
+
+def test_confirmation_cannot_approve_mutated_arguments(session, monkeypatch):
+    _runtime_factory(session, monkeypatch)
+    preferences = ComputerPreferences(enabled=True, mode="command")
+    proposed = invoke_tool(
+        "activate_operation",
+        {"operation_id": "route-a"},
+        InvocationSource.EXPLICIT_USER,
+        preferences,
+    )
+    assert proposed["status"] == "awaiting_confirmation"
+
+    invocation = session.get(ComputerInvocation, proposed["id"])
+    invocation.arguments = {"operation_id": "route-b"}
+    session.commit()
+
+    resolved = resolve_confirmation(
+        proposed["confirmation_id"], preferences, approve=True
+    )
+    assert resolved["status"] == "failed"
+    assert "integrity" in resolved["error"].casefold()
+
+
+def test_pending_invocation_can_be_canceled(session, monkeypatch):
+    _runtime_factory(session, monkeypatch)
+    preferences = ComputerPreferences(enabled=True, mode="command")
+    proposed = invoke_tool(
+        "activate_operation",
+        {"operation_id": "route-a"},
+        InvocationSource.EXPLICIT_USER,
+        preferences,
+    )
+
+    canceled = cancel_invocation(proposed["id"])
+
+    assert canceled["status"] == "canceled"
+    assert "Commander canceled" in canceled["error"]
+
+
+def test_binding_discovery_reads_mixed_devices_and_unbound_actions(tmp_path):
+    fixture = (
+        Path(__file__).parent
+        / "fixtures"
+        / "bindings"
+        / "MixedCustom.4.1.binds"
+    )
+    target = tmp_path / fixture.name
+    target.write_bytes(fixture.read_bytes())
+    (tmp_path / "StartPreset.start").write_text(
+        "MissingPreset\nMixedCustom.4.1\nMixedCustom.4.1\n",
+        encoding="utf-8",
+    )
+
+    assert locate_active_bindings(tmp_path) == target
+    report = binding_report(tmp_path)
+    capabilities = {
+        item["action_id"]: item for item in report["capabilities"]
+    }
+
+    assert report["available"] is True
+    assert report["device_kinds"] == ["controller", "hotas", "keyboard", "mouse"]
+    assert capabilities["landing_gear"]["primary"]["device_kind"] == "keyboard"
+    assert capabilities["landing_gear"]["secondary"]["device_kind"] == "hotas"
+    assert capabilities["night_vision"]["status"] == "unbound"
+
+
+def test_binding_discovery_reports_conflicts_and_malformed_files(tmp_path):
+    conflict = tmp_path / "Conflict.binds"
+    conflict.write_text(
+        """<Root PresetName="Conflict">
+        <LandingGearToggle><Primary Device="Keyboard" Key="Key_L" /></LandingGearToggle>
+        <ToggleCargoScoop><Primary Device="Keyboard" Key="Key_L" /></ToggleCargoScoop>
+        </Root>""",
+        encoding="utf-8",
+    )
+    report = parse_bindings_file(conflict)
+    assert report["conflict_count"] == 2
+    assert all(
+        item["status"] == "conflict"
+        for item in report["capabilities"]
+        if item["action_id"] in {"landing_gear", "cargo_scoop"}
+    )
+
+    malformed = tmp_path / "Broken.binds"
+    malformed.write_text("<Root><Broken>", encoding="utf-8")
+    broken = parse_bindings_file(malformed)
+    assert broken["available"] is False
+    assert "could not be read" in broken["warning"]
+
+
+def test_binding_monitor_detects_file_changes_without_sending_input(
+    tmp_path, monkeypatch
+):
+    fixture = (
+        Path(__file__).parent
+        / "fixtures"
+        / "bindings"
+        / "MixedCustom.4.1.binds"
+    )
+    target = tmp_path / fixture.name
+    target.write_bytes(fixture.read_bytes())
+    monitor = EliteBindingsMonitor()
+    monkeypatch.setattr(monitor, "_directory", lambda: tmp_path)
+
+    assert monitor.scan_once() is None
+    target.write_text(
+        target.read_text(encoding="utf-8").replace(
+            'Key="Key_Insert"', 'Key="Key_Home"'
+        ),
+        encoding="utf-8",
+    )
+    changed = monitor.scan_once()
+
+    assert changed is not None
+    assert changed["available"] is True

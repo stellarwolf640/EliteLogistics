@@ -75,5 +75,17 @@ export function connectQueryEvents(queryClient: QueryClient) {
     if (event.type === "update.progressed") {
       void queryClient.invalidateQueries({ queryKey: ["update-status"] });
     }
+    if (event.type.startsWith("computer.")) {
+      void queryClient.invalidateQueries({ queryKey: ["computer-status"] });
+      void queryClient.invalidateQueries({ queryKey: ["computer-invocations"] });
+    }
+    if (event.type === "computer.bindings.changed") {
+      void queryClient.invalidateQueries({ queryKey: ["computer-bindings"] });
+    }
+    if (event.type === "computer.interface.requested") {
+      window.dispatchEvent(
+        new CustomEvent("ion:computer-interface", { detail: event.payload }),
+      );
+    }
   });
 }

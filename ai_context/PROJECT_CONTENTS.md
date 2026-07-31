@@ -75,6 +75,13 @@ PUT    /api/elite/settings
 GET    /api/computer/status
 GET    /api/computer/tools
 GET    /api/computer/controls
+PUT    /api/computer/settings
+POST   /api/computer/settings/reset
+POST   /api/computer/tools/invoke
+GET    /api/computer/invocations
+POST   /api/computer/invocations/{invocation_id}/cancel
+POST   /api/computer/confirmations/{confirmation_id}
+GET    /api/computer/bindings
 
 GET    /api/ship-profiles
 POST   /api/ship-profiles
@@ -163,7 +170,18 @@ Provider-neutral ION Computer foundation:
 - Explicit-user, confirmed-proposal, manual-control, and proactive sources.
 - Default-deny authorization for Computer and game actions.
 - Per-action opt-in and Amber confirmation requirements.
-- No model, speech, raw keyboard, or execution adapter.
+- Stable executable-tool allowlist for the C2 policy runtime.
+- No model, speech, raw keyboard, or game-input adapter.
+
+### Computer runtime and binding modules
+
+- `computer_runtime.py`: the single policy-gated executor for Read and ION
+  tools, immutable confirmation proposals, timeout/cancellation handling,
+  structured results, WebSocket events, and the local invocation audit.
+- `elite_bindings.py`: read-only active `.binds` discovery, XML parsing,
+  primary/secondary binding normalization, device classification, conflict
+  detection, capability reporting, and file-change monitoring.
+- Neither module sends keyboard, mouse, HOTAS, or other game input.
 
 ### `backend/src/elite_logistics/database.py`
 
@@ -180,6 +198,8 @@ Current tables:
 - `data_imports`
 - `jobs`
 - `active_operations`
+- `computer_invocations`
+- `computer_confirmations`
 
 SQLite uses:
 
@@ -226,6 +246,8 @@ Background work:
 
 - `events.py`: bounded sequence buffer and thread-safe subscribers.
 - `elite_monitor.py`: background journal/file monitor and typed Elite events.
+- `elite_bindings.py`: background read-only bindings monitor and capability
+  change events.
 - `updater.py`: stable-release discovery, Ed25519 manifest verification,
   streamed installer download, size/hash validation, and handoff to the shell.
 - `version.py`: the canonical `0.2.3` application version.
@@ -286,6 +308,7 @@ Current route hierarchy:
 /ships                  Ship Profiles
 /ship-optimizations     Ship Optimizations
 /data                   Data Network
+/computer               Computer settings, safe tools, bindings, and audit
 /settings               Desktop settings, updater, and diagnostics
 /flight-board           Standalone second-screen manifest
 ```
@@ -359,6 +382,8 @@ Single global visual system:
 - Current-location/radius controls.
 - Location clearing behavior.
 - Distinct slot-by-slot ship optimization profiles.
+- Computer safety messaging, binding capability display, and stable manual
+  clearing of the bindings-directory field.
 
 ## Data flow
 
@@ -444,8 +469,8 @@ npm --prefix frontend run test:e2e
 
 At the time this context was created:
 
-- Backend: 34 tests passing.
-- Frontend: 10 tests passing.
+- Backend: 42 tests passing.
+- Frontend: 11 tests passing.
 - End-to-end: 4 scenarios passing.
 - Production frontend build passing.
 - Source, frozen, native-window, installer, installed-app, and uninstall smoke tests passing.

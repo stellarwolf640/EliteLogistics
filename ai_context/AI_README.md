@@ -233,4 +233,6 @@ Development launch:
 - The future Linux service, accounts/company administration, and other
   professions remain unimplemented.
 - Computer tool/control contracts and preferences exist, but model, voice,
-  wake-word, binding discovery, and game-input execution do not.
+  wake-word, deterministic command interpretation, and game-input execution do
+  not. Safe Read/ION tool execution and read-only binding discovery are
+  implemented.

@@ -18,6 +18,29 @@ This changelog records product and architectural changes that future agents need
 - Added the canonical `COMPUTER_DESIGN.md` and authorization regression tests.
 - Added `COMPUTER_ROADMAP.md` with the C0–C12 implementation sequence,
   dependencies, safety gates, and acceptance criteria.
+- Merged foundation PR #3 into `main`.
+- Implemented the C1 Computer service with Off/Command/runtime mode visibility,
+  verbosity, commander address, proactivity, confirmation policy, Class B
+  master and per-action permissions, safe-default reset, tool catalogue, and
+  explicit unavailable-runtime explanations.
+- Implemented C2's single policy-gated Read/ION tool executor with structured
+  arguments/results, two-minute immutable confirmations, integrity checks,
+  timeouts, cancellation, local SQLite invocation auditing, and typed Computer
+  events over the existing WebSocket.
+- Added executable awareness tools for operational, ship, navigation, cargo,
+  current-system, active-operation, next-instruction, and control-capability
+  state.
+- Added safe interface tools for navigation, the route console, planner/filter
+  population, information cards, and diagnostics. All interface payloads are
+  allowlisted; no arbitrary script or input execution exists.
+- Implemented C3 read-only Elite `.binds` discovery with active-preset
+  selection, primary/secondary binding parsing, keyboard/mouse/HOTAS/controller
+  classification, conflict and unbound reporting, sanitized fixtures, and a
+  background change monitor.
+- Added the `/computer` in-universe service console for policy, safe tool
+  testing, binding readiness, Class B permissions, and local audit visibility.
+- Class B remains preparatory: binding discovery never edits a binding file or
+  sends an input to Elite.
 
 ## 0.2.3 — 2026-07-29
 

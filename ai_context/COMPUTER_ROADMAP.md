@@ -55,6 +55,8 @@ Remaining before completion:
 
 ## C1 — Computer settings and policy interface
 
+**Status: implemented**
+
 Build user-facing configuration without executing tools.
 
 ### Features
@@ -93,6 +95,8 @@ Build user-facing configuration without executing tools.
 - The UI clearly says execution is not installed.
 
 ## C2 — Safe tool-execution runtime
+
+**Status: implemented**
 
 Implement orchestration using only Read and ION tools.
 
@@ -150,6 +154,8 @@ A model or command parser never calls application functions directly.
 - No game-input execution exists yet.
 
 ## C3 — Elite binding discovery
+
+**Status: implemented**
 
 Understand available bindings before attempting control.
 
@@ -576,10 +582,10 @@ https://www.frontier.co.uk/legal/eula
 
 ## Recommended delivery order
 
-1. Merge PR #3.
-2. Build C1 settings.
-3. Build C2 safe ION tool execution.
-4. Build C3 binding discovery.
+1. Merge PR #3. **Complete**
+2. Build C1 settings. **Complete**
+3. Build C2 safe ION tool execution. **Complete**
+4. Build C3 binding discovery. **Complete**
 5. Build C4 manual Input Bridge.
 6. Build C5 deterministic text Computer.
 7. Add C6 voice output.

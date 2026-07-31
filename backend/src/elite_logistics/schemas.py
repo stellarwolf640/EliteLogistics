@@ -229,6 +229,7 @@ class ComputerPreferences(BaseModel):
     class_b_enabled: bool = False
     enabled_game_actions: list[str] = Field(default_factory=list, max_length=100)
     confirmation_policy: Literal["always", "recommended", "minimal"] = "recommended"
+    bindings_directory: str = Field(default="", max_length=1000)
 
     @field_validator("enabled_game_actions")
     @classmethod
@@ -236,6 +237,15 @@ class ComputerPreferences(BaseModel):
         from .computer import CONTROLS_BY_ID
 
         return list(dict.fromkeys(value for value in values if value in CONTROLS_BY_ID))
+
+
+class ComputerToolInvocationInput(BaseModel):
+    tool_name: str = Field(min_length=1, max_length=100)
+    arguments: dict = Field(default_factory=dict)
+    source: Literal[
+        "explicit_user", "confirmed_proposal", "manual_control", "proactive"
+    ] = "explicit_user"
+    timeout_seconds: float = Field(default=5, ge=0.1, le=30)
 
 
 class PreferencesPayload(BaseModel):

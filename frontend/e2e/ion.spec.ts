@@ -63,3 +63,19 @@ test("compares direct, fast, balanced, and profit transit plans", async ({ page 
   await page.getByRole("button", { name: "Plan profitable transit" }).click();
   for (const profile of ["Direct", "Fast", "Balanced", "Profit"]) await expect(page.getByText(`${profile} route`, { exact: true })).toBeVisible();
 });
+
+test("configures Computer and runs one audited safe tool", async ({ page }) => {
+  await page.goto("/computer");
+  await expect(page.getByRole("heading", { name: "Computer policy and capability." })).toBeVisible();
+  await expect(page.getByText(/No game input is sent/i)).toBeVisible();
+
+  await page.getByLabel("Operating mode").selectOption("command");
+  const snapshot = page.locator(".computer-tools article").filter({ hasText: "get operational snapshot" });
+  await expect(snapshot.getByRole("button", { name: "Run" })).toBeEnabled();
+  await snapshot.getByRole("button", { name: "Run" }).click();
+
+  await expect(page.getByText("Latest invocation")).toBeVisible();
+  await expect(page.locator(".computer-result")).toContainText("completed");
+  await expect(page.getByRole("heading", { name: "Elite control bindings" })).toBeVisible();
+  await expect(page.getByText(/cannot press a key or control Elite/i)).toBeVisible();
+});

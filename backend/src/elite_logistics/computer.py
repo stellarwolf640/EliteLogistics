@@ -14,6 +14,25 @@ from typing import Protocol
 
 FOUNDATION_VERSION = 1
 
+EXECUTABLE_TOOL_NAMES = frozenset(
+    {
+        "get_operational_snapshot",
+        "get_ship_state",
+        "get_navigation_state",
+        "get_cargo_manifest",
+        "get_control_capabilities",
+        "inspect_current_system",
+        "get_active_operation",
+        "get_next_instruction",
+        "open_ion_view",
+        "open_route_console",
+        "populate_planner",
+        "change_search_filters",
+        "show_information_card",
+        "show_diagnostics",
+    }
+)
+
 
 class ToolPermission(StrEnum):
     READ = "read"
@@ -45,6 +64,9 @@ class ToolDefinition:
     def to_dict(self) -> dict:
         value = asdict(self)
         value["permission"] = self.permission.value
+        value["implementation_status"] = (
+            "available" if self.name in EXECUTABLE_TOOL_NAMES else self.implementation_status
+        )
         return value
 
 
@@ -230,6 +252,8 @@ def authorize_tool(
         return AuthorizationResult(False, "ION Computer is disabled.")
     if tool.requires_explicit_user and source == InvocationSource.PROACTIVE:
         return AuthorizationResult(False, "This tool requires an explicit commander action.")
+    if source == InvocationSource.PROACTIVE and not tool.proactive_allowed:
+        return AuthorizationResult(False, "This tool is not available to proactive events.")
     if tool.permission in (ToolPermission.GAME_GREEN, ToolPermission.GAME_AMBER):
         if not preferences.class_b_enabled:
             return AuthorizationResult(False, "Class B game controls are disabled.")
