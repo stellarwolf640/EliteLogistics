@@ -16,6 +16,8 @@ This changelog records product and architectural changes that future agents need
 - Deliberately did not add speech, wake word, raw keyboard input, model
   inference, or game-control execution.
 - Added the canonical `COMPUTER_DESIGN.md` and authorization regression tests.
+- Added `COMPUTER_ROADMAP.md` with the C0–C12 implementation sequence,
+  dependencies, safety gates, and acceptance criteria.
 
 ## 0.2.3 — 2026-07-29
 

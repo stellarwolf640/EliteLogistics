@@ -6,6 +6,7 @@
 EliteLogistics/                    Repository name retained for compatibility
 ├── ai_context/                     AI-agent onboarding and history
 │   └── COMPUTER_DESIGN.md          Computer capability and safety contract
+│   └── COMPUTER_ROADMAP.md         Computer C0–C12 delivery roadmap
 ├── backend/                        FastAPI application and route engine
 │   ├── migrations/                 Alembic migrations
 │   ├── src/elite_logistics/        Backend package

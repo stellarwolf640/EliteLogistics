@@ -7,8 +7,9 @@ IntraStellar Operations Network. Read these files before changing code:
 2. `PROJECT_CONTENTS.md` — repository map, routes, APIs, data flow, and important files.
 3. `CHANGELOG.md` — implemented changes and current release state.
 4. `COMPUTER_DESIGN.md` — agreed Computer capabilities, controls, and safety boundaries.
-5. `/ROADMAP.md` — planned release sequence.
-6. `/elite_logistics_initial_design.md` — original detailed design and mathematical assumptions.
+5. `COMPUTER_ROADMAP.md` — C0–C12 completion sequence and acceptance criteria.
+6. `/ROADMAP.md` — planned application release sequence.
+7. `/elite_logistics_initial_design.md` — original detailed design and mathematical assumptions.
 
 ## Product
 
