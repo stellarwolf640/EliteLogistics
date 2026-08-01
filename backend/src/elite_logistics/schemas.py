@@ -229,6 +229,24 @@ class ComputerPreferences(BaseModel):
     class_b_enabled: bool = False
     enabled_game_actions: list[str] = Field(default_factory=list, max_length=100)
     confirmation_policy: Literal["always", "recommended", "minimal"] = "recommended"
+    bindings_directory: str = Field(default="", max_length=1000)
+    speech_output_enabled: bool = False
+    speech_voice: str = Field(default="", max_length=200)
+    speech_rate: float = Field(default=1.0, ge=0.5, le=2.0)
+    speech_volume: float = Field(default=1.0, ge=0.0, le=1.0)
+    speech_input_mode: Literal["disabled", "push_to_talk"] = "disabled"
+    speech_confidence_threshold: float = Field(default=0.85, ge=0.5, le=1.0)
+    disabled_alert_categories: list[str] = Field(default_factory=list, max_length=100)
+    model_runtime_enabled: bool = False
+    model_server_path: str = Field(default="", max_length=1000)
+    lite_model_manifest: str = Field(default="", max_length=1000)
+    enhanced_model_manifest: str = Field(default="", max_length=1000)
+    model_context_tokens: int = Field(default=4096, ge=1024, le=32768)
+    model_memory_limit_mb: int = Field(default=4096, ge=1024, le=65536)
+    model_gpu_layers: int = Field(default=0, ge=0, le=200)
+    model_evaluation_threshold: float = Field(default=0.85, ge=0.5, le=1.0)
+    model_evaluation_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    model_evaluated_sha256: str = Field(default="", max_length=64)
 
     @field_validator("enabled_game_actions")
     @classmethod
@@ -236,6 +254,38 @@ class ComputerPreferences(BaseModel):
         from .computer import CONTROLS_BY_ID
 
         return list(dict.fromkeys(value for value in values if value in CONTROLS_BY_ID))
+
+    @field_validator("disabled_alert_categories")
+    @classmethod
+    def normalize_alert_categories(cls, values: list[str]) -> list[str]:
+        return list(
+            dict.fromkeys(
+                value.strip().casefold()
+                for value in values
+                if value.strip() and len(value.strip()) <= 80
+            )
+        )
+
+
+class ComputerToolInvocationInput(BaseModel):
+    tool_name: str = Field(min_length=1, max_length=100)
+    arguments: dict = Field(default_factory=dict)
+    source: Literal[
+        "explicit_user", "confirmed_proposal", "manual_control", "proactive"
+    ] = "explicit_user"
+    timeout_seconds: float = Field(default=5, ge=0.1, le=30)
+
+
+class ComputerCommandInput(BaseModel):
+    text: str = Field(min_length=1, max_length=500)
+    activation: Literal["typed", "push_to_talk"] = "typed"
+    session_id: str | None = Field(default=None, max_length=100)
+
+
+class ComputerManualControlInput(BaseModel):
+    action_id: str = Field(min_length=1, max_length=100)
+    desired_state: bool | None = None
+    timeout_seconds: float = Field(default=5, ge=0.1, le=10)
 
 
 class PreferencesPayload(BaseModel):

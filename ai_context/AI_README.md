@@ -232,5 +232,7 @@ Development launch:
 - Windows Snap Layout integration is deferred; normal native edge resizing works.
 - The future Linux service, accounts/company administration, and other
   professions remain unimplemented.
-- Computer tool/control contracts and preferences exist, but model, voice,
-  wake-word, binding discovery, and game-input execution do not.
+- Computer C0–C5 is implemented: policy/preferences, audited Read/ION tools,
+  binding discovery, the Windows-local allowlisted Input Bridge, manual
+  controls, and deterministic typed Command Mode. Models, voice, wake word,
+  broader planning tools, and proactive alerts remain later milestones.

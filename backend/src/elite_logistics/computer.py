@@ -14,6 +14,45 @@ from typing import Protocol
 
 FOUNDATION_VERSION = 1
 
+EXECUTABLE_TOOL_NAMES = frozenset(
+    {
+        "get_operational_snapshot",
+        "get_ship_state",
+        "get_navigation_state",
+        "get_cargo_manifest",
+        "get_control_capabilities",
+        "inspect_current_system",
+        "get_active_operation",
+        "get_next_instruction",
+        "search_one_way_trades",
+        "search_round_trips",
+        "plan_trade_route",
+        "plan_profitable_transit",
+        "find_cargo_sale",
+        "source_commodity",
+        "compare_plans",
+        "estimate_reachability",
+        "replan_from_current_state",
+        "activate_operation",
+        "set_operation_progress",
+        "pause_operation",
+        "resume_operation",
+        "cancel_operation",
+        "replace_operation",
+        "snooze_alert",
+        "acknowledge_alert",
+        "open_ion_view",
+        "open_route_console",
+        "populate_planner",
+        "change_search_filters",
+        "show_information_card",
+        "show_diagnostics",
+        "set_ship_system",
+        "open_game_interface",
+        "set_power_distribution",
+    }
+)
+
 
 class ToolPermission(StrEnum):
     READ = "read"
@@ -45,6 +84,9 @@ class ToolDefinition:
     def to_dict(self) -> dict:
         value = asdict(self)
         value["permission"] = self.permission.value
+        value["implementation_status"] = (
+            "available" if self.name in EXECUTABLE_TOOL_NAMES else self.implementation_status
+        )
         return value
 
 
@@ -226,10 +268,16 @@ def authorize_tool(
     tool = TOOLS_BY_NAME.get(tool_name)
     if tool is None:
         return AuthorizationResult(False, "Unknown Computer tool.")
-    if not preferences.enabled or preferences.mode == "off":
+    manual_game_control = (
+        source == InvocationSource.MANUAL_CONTROL
+        and tool.permission in (ToolPermission.GAME_GREEN, ToolPermission.GAME_AMBER)
+    )
+    if (not preferences.enabled or preferences.mode == "off") and not manual_game_control:
         return AuthorizationResult(False, "ION Computer is disabled.")
     if tool.requires_explicit_user and source == InvocationSource.PROACTIVE:
         return AuthorizationResult(False, "This tool requires an explicit commander action.")
+    if source == InvocationSource.PROACTIVE and not tool.proactive_allowed:
+        return AuthorizationResult(False, "This tool is not available to proactive events.")
     if tool.permission in (ToolPermission.GAME_GREEN, ToolPermission.GAME_AMBER):
         if not preferences.class_b_enabled:
             return AuthorizationResult(False, "Class B game controls are disabled.")
@@ -268,7 +316,9 @@ def authorize_control_action(
     action = CONTROLS_BY_ID.get(action_id)
     if action is None:
         return AuthorizationResult(False, "Unknown or prohibited game-control action.")
-    if not preferences.enabled or preferences.mode == "off":
+    if (
+        not preferences.enabled or preferences.mode == "off"
+    ) and source != InvocationSource.MANUAL_CONTROL:
         return AuthorizationResult(False, "ION Computer is disabled.")
     if not preferences.class_b_enabled:
         return AuthorizationResult(False, "Class B game controls are disabled.")

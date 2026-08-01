@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConfidenceBadge, FlightBoard, LocationPicker, SearchFields, TradeCard, elitePlanningPatch } from "./components";
-import { ConsoleHeader } from "./App";
+import { ComputerPage, ConsoleHeader } from "./App";
 import type { EliteStatus, SearchDraft, TradeLeg } from "./types";
 import { defaultDraft } from "./useSearchDraft";
 import { optimizeShip, SHIP_CATALOG } from "./shipCatalog";
@@ -204,5 +204,103 @@ describe("route presentation", () => {
     );
     expect(await screen.findByText("LIVE ROUTE TRACKING")).toBeInTheDocument();
     expect(screen.getByText("Target: Waypoint")).toBeInTheDocument();
+  });
+
+  it("shows safe Computer settings and lets a cleared bindings path stay clear", async () => {
+    const computerSettings = {
+      schema_version: 1,
+      enabled: false,
+      mode: "off",
+      address_as_commander: true,
+      verbosity: "standard",
+      proactivity: "critical",
+      class_b_enabled: false,
+      enabled_game_actions: [],
+      confirmation_policy: "recommended",
+      bindings_directory: "C:\\Elite\\Bindings",
+    };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      let body: unknown = [];
+      if (url.includes("/api/computer/status")) {
+        body = {
+          foundation_version: 1,
+          settings: computerSettings,
+          runtimes: { command: "policy_runtime", input_bridge: "not_installed" },
+          catalog: { tools: 1, initial_tools: 1, controls: 1, initial_controls: 1 },
+          execution_available: true,
+          executable_tools: ["get_operational_snapshot"],
+          warnings: ["Class B settings are preparatory only; ION cannot send game inputs."],
+        };
+      } else if (url.includes("/api/computer/tools")) {
+        body = [{
+          name: "get_operational_snapshot",
+          category: "awareness",
+          description: "Operational state",
+          permission: "read",
+          initial_release: true,
+          requires_explicit_user: false,
+          requires_confirmation: false,
+          proactive_allowed: true,
+          implementation_status: "available",
+        }];
+      } else if (url.includes("/api/computer/controls")) {
+        body = [{
+          action_id: "landing_gear",
+          group: "ship_system",
+          label: "Landing gear",
+          permission: "game_green",
+          desired_state: true,
+          verifiable: true,
+          initial_release: true,
+          description: "Deploy or retract landing gear.",
+        }];
+      } else if (url.includes("/api/computer/bindings")) {
+        body = {
+          available: true,
+          configured_directory: "C:\\Elite\\Bindings",
+          file_name: "Custom.binds",
+          preset: "Custom",
+          capabilities: [{
+            action_id: "landing_gear",
+            label: "Landing gear",
+            elite_binding: "LandingGearToggle",
+            primary: { device: "Keyboard", device_kind: "keyboard", key: "Key_L", modifiers: [], display: "Keyboard: L" },
+            secondary: null,
+            status: "ready",
+            conflicts: [],
+            ion_status: "ready",
+            input_bridge_available: true,
+          }],
+          device_kinds: ["keyboard"],
+          conflict_count: 0,
+          warning: null,
+          input_bridge_available: true,
+        };
+      } else if (url.includes("/api/computer/input-bridge")) {
+        body = {
+          available: true,
+          platform: "windows",
+          emergency_disabled: false,
+          emergency_hotkey: "Ctrl + Shift + Pause",
+          busy: false,
+          active_action: null,
+          last_result: null,
+          minimum_interval_seconds: 0.4,
+        };
+      }
+      return { ok: true, status: 200, json: async () => body } as Response;
+    }));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><ComputerPage /></QueryClientProvider>);
+
+    expect(await screen.findByText("Computer settings")).toBeInTheDocument();
+    expect(await screen.findByText("Computer console")).toBeInTheDocument();
+    expect(await screen.findByText("READY FOR FOREGROUND CHECK")).toBeInTheDocument();
+    expect(await screen.findByText(/cannot send game inputs/i)).toBeInTheDocument();
+    expect(await screen.findByText("Keyboard: L")).toBeInTheDocument();
+    const path = screen.getByDisplayValue("C:\\Elite\\Bindings");
+    fireEvent.change(path, { target: { value: "" } });
+    expect(path).toHaveValue("");
   });
 });

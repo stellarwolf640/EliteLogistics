@@ -7,6 +7,7 @@ from .api import _elite_settings
 from .database import SessionLocal
 from .elite_data import EliteDataReader, sync_current_market
 from .events import event_bus
+from .schemas import ComputerPreferences
 
 
 class EliteMonitor:
@@ -44,6 +45,14 @@ class EliteMonitor:
 
     def _run(self) -> None:
         while not self._stop.wait(self.interval_seconds):
+            try:
+                from .elite_bindings import elite_bindings_monitor
+
+                elite_bindings_monitor.scan_once()
+            except Exception as exc:
+                event_bus.publish(
+                    "computer.bindings.changed", {"available": False, "error": str(exc)}
+                )
             if self.paused:
                 continue
             try:
@@ -60,6 +69,9 @@ class EliteMonitor:
             state = EliteDataReader(directory).read()
             current = state.to_dict()
             previous = self._previous
+            computer_preferences = ComputerPreferences.model_validate(
+                values.get("computer") or {}
+            )
             if previous is None:
                 event_bus.publish("elite.connected", current)
                 event_bus.publish("elite.state.changed", current)
@@ -97,6 +109,18 @@ class EliteMonitor:
             imported = sync_current_market(session, directory, state) if state.available else 0
             if imported:
                 event_bus.publish("market.updated", {"records": imported})
+            if (
+                computer_preferences.enabled
+                and computer_preferences.proactivity != "silent"
+            ):
+                from .computer_alerts import computer_alert_engine
+
+                computer_alert_engine.process(
+                    session,
+                    current,
+                    previous,
+                    computer_preferences,
+                )
             self._previous = current
 
 

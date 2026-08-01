@@ -197,6 +197,9 @@ class DesktopBridge:
         result = self._shell.main_window.create_file_dialog(dialog_type)
         return str(result[0]) if result else None
 
+    def choose_bindings_folder(self) -> str | None:
+        return self.choose_journal_folder()
+
     def open_route_console(self) -> None:
         self._shell.open_route_console()
 

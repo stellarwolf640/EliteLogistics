@@ -12,8 +12,21 @@ import {
   Wrench,
   X,
   Settings,
+  Bot,
+  Keyboard,
+  ShieldCheck,
+  RotateCcw,
+  Terminal,
+  Send,
+  AlertOctagon,
+  Mic,
+  Volume2,
+  VolumeX,
+  Bell,
+  Cpu,
+  Trash2,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 import {
   EmptyState,
@@ -26,11 +39,12 @@ import {
   formatCredits,
   formatTime,
 } from "./components";
-import type { EliteStatus, ImmersiveTradeRoute, JobResponse, Preferences, RoundTrip, SearchDraft, ShipProfile, TradeLeg, TransitResult, TransitSummary } from "./types";
+import type { BindingCapability, ComputerCommandResponse, ComputerInvocation, ComputerPreferences, EliteStatus, ImmersiveTradeRoute, JobResponse, Preferences, RoundTrip, SearchDraft, ShipProfile, TradeLeg, TransitResult, TransitSummary } from "./types";
 import { useSearchDraft } from "./useSearchDraft";
 import { optimizeShip, SHIP_CATALOG, type OptimizationMode } from "./shipCatalog";
 import { connectQueryEvents } from "./events";
 import { desktopCall } from "./desktopBridge";
+import { speechOutput } from "./speech";
 
 const routeLabels: Record<string, string[]> = {
   "/": ["HOME"],
@@ -44,8 +58,22 @@ const routeLabels: Record<string, string[]> = {
   "/ships": ["HOME", "FLEET MANAGEMENT", "SHIP PROFILES"],
   "/ship-optimizations": ["HOME", "FLEET MANAGEMENT", "SHIP OPTIMIZATIONS"],
   "/data": ["HOME", "DATA NETWORK"],
+  "/computer": ["HOME", "COMPUTER"],
   "/settings": ["HOME", "ION SETTINGS"],
 };
+
+const configurableAlertCategories = [
+  "no_scoopable_star",
+  "cargo_mismatch",
+  "passed_destination",
+  "market_expiry",
+  "insufficient_demand",
+  "reduced_range",
+  "unreachable_route",
+  "operation_step",
+  "game_link",
+  "service_opportunity",
+];
 
 const breadcrumbTargets: Record<string, string> = {
   HOME: "/",
@@ -59,6 +87,7 @@ const breadcrumbTargets: Record<string, string> = {
   "SHIP PROFILES": "/ships",
   "SHIP OPTIMIZATIONS": "/ship-optimizations",
   "DATA NETWORK": "/data",
+  COMPUTER: "/computer",
   "ION SETTINGS": "/settings",
 };
 
@@ -79,8 +108,35 @@ export default function App() {
   const path = usePath();
   const { draft, setDraft } = useSearchDraft();
   const queryClient = useQueryClient();
+  const [computerCard, setComputerCard] = useState<{ title: string; body: string; tone: string } | null>(null);
   useEffect(() => connectQueryEvents(queryClient), [queryClient]);
   const update = (patch: Partial<SearchDraft>) => setDraft((current) => ({ ...current, ...patch }));
+  useEffect(() => {
+    const handle = (event: Event) => {
+      const detail = (event as CustomEvent).detail as {
+        action?: string;
+        path?: string;
+        fields?: Partial<SearchDraft>;
+        filters?: Partial<SearchDraft>;
+        title?: string;
+        body?: string;
+        tone?: string;
+      };
+      if (detail.action === "navigate" && detail.path) navigateTo(detail.path);
+      if (detail.action === "open_route_console") void desktopCall("open_route_console");
+      if (detail.action === "populate_planner" && detail.fields) update(detail.fields);
+      if (detail.action === "change_filters" && detail.filters) update(detail.filters);
+      if (detail.action === "show_information_card" && detail.body) {
+        setComputerCard({
+          title: detail.title || "Computer",
+          body: detail.body,
+          tone: detail.tone || "information",
+        });
+      }
+    };
+    window.addEventListener("ion:computer-interface", handle);
+    return () => window.removeEventListener("ion:computer-interface", handle);
+  }, []);
   const status = useQuery({ queryKey: ["data-status"], queryFn: api.dataStatus });
   const elite = useQuery({
     queryKey: ["elite-status"],
@@ -118,8 +174,17 @@ export default function App() {
         {path === "/ships" && <ShipsPage draft={draft} update={update} />}
         {path === "/ship-optimizations" && <ShipOptimizationsPage draft={draft} update={update} />}
         {path === "/data" && <DataPage draft={draft} update={update} />}
+        {path === "/computer" && <ComputerPage />}
         {path === "/settings" && <SettingsPage />}
         {!routeLabels[path] && <Dashboard status={status.data} draft={draft} />}
+        {computerCard && (
+          <aside className={`computer-information-card ${computerCard.tone}`}>
+            <span className="eyebrow">ION Computer</span>
+            <h2>{computerCard.title}</h2>
+            <p>{computerCard.body}</p>
+            <button className="secondary" onClick={() => setComputerCard(null)}>Dismiss</button>
+          </aside>
+        )}
       </main>
     </div>
   );
@@ -250,7 +315,8 @@ function Dashboard({ status, draft, elite }: { status?: Awaited<ReturnType<typeo
         <ServiceTile index="02" icon={Route} title="Navigation" body="Plan direct and profitable travel across populated space." meta="1 SERVICE" onClick={() => navigate("/navigation")} />
         <ServiceTile index="03" icon={Ship} title="Fleet Management" body="Store ship profiles and plan complete role-specific module loadouts." meta="2 SERVICES" onClick={() => navigate("/fleet")} />
         <ServiceTile index="04" icon={Database} title="Data Network" body="Control live, regional, and full-galaxy market coverage." meta={`${status?.market_observations.toLocaleString() ?? 0} RECORDS`} onClick={() => navigate("/data")} />
-        <ServiceTile index="05" icon={Settings} title="ION Settings" body="Desktop behavior, route-console display, updates, and local diagnostics." meta="SYSTEM CONTROL" onClick={() => navigate("/settings")} />
+        <ServiceTile index="05" icon={Bot} title="Computer" body="Configure Computer policy, inspect Elite bindings, and run safe ION awareness tools." meta="COMMAND FOUNDATION" onClick={() => navigate("/computer")} featured />
+        <ServiceTile index="06" icon={Settings} title="ION Settings" body="Desktop behavior, route-console display, updates, and local diagnostics." meta="SYSTEM CONTROL" onClick={() => navigate("/settings")} />
       </section>
     </div>
   );
@@ -709,6 +775,626 @@ function DataPage({ draft, update }: { draft: SearchDraft; update: (patch: Parti
       {mode === "live" && <Notice>Live lookup is active. Searches request fresh regional candidates only when needed and retain a small local cache for repeat use.</Notice>}
       <Notice>Community market data can change before you arrive. Confidence is reduced using observation age, supply, demand, and estimated arrival time.</Notice>
     </div>
+  );
+}
+
+export function ComputerPage() {
+  const queryClient = useQueryClient();
+  const status = useQuery({ queryKey: ["computer-status"], queryFn: api.computerStatus });
+  const tools = useQuery({ queryKey: ["computer-tools"], queryFn: api.computerTools });
+  const controls = useQuery({ queryKey: ["computer-controls"], queryFn: api.computerControls });
+  const bindings = useQuery({ queryKey: ["computer-bindings"], queryFn: api.computerBindings });
+  const invocations = useQuery({ queryKey: ["computer-invocations"], queryFn: api.computerInvocations });
+  const alerts = useQuery({ queryKey: ["computer-alerts"], queryFn: api.computerAlerts });
+  const models = useQuery({ queryKey: ["computer-models"], queryFn: api.computerModelsStatus });
+  const privacy = useQuery({ queryKey: ["computer-privacy"], queryFn: api.computerPrivacy });
+  const bridge = useQuery({ queryKey: ["computer-input-bridge"], queryFn: api.inputBridgeStatus });
+  const speech = useQuery({ queryKey: ["computer-speech-input"], queryFn: api.speechInputStatus });
+  const [result, setResult] = useState<ComputerInvocation | null>(null);
+  const [bindingsDirectory, setBindingsDirectory] = useState("");
+  const [commandText, setCommandText] = useState("");
+  const [commandSession, setCommandSession] = useState<string>();
+  const [transcript, setTranscript] = useState<ComputerCommandResponse[]>([]);
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [speechMessage, setSpeechMessage] = useState("");
+  const [listening, setListening] = useState(false);
+  const [modelServerPath, setModelServerPath] = useState("");
+  const [liteManifest, setLiteManifest] = useState("");
+  const [enhancedManifest, setEnhancedManifest] = useState("");
+  const [deletionPhrase, setDeletionPhrase] = useState("");
+  const [deleteModels, setDeleteModels] = useState(false);
+  const commandInput = useRef<HTMLInputElement>(null);
+  const listeningStart = useRef<Promise<unknown> | null>(null);
+  const announcedAlerts = useRef(new Set<string>());
+  const save = useMutation({
+    mutationFn: api.updateComputerSettings,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["computer-status"] });
+      void queryClient.invalidateQueries({ queryKey: ["preferences"] });
+      void queryClient.invalidateQueries({ queryKey: ["computer-bindings"] });
+    },
+  });
+  const reset = useMutation({
+    mutationFn: api.resetComputerSettings,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["computer-status"] });
+      void queryClient.invalidateQueries({ queryKey: ["preferences"] });
+      void queryClient.invalidateQueries({ queryKey: ["computer-bindings"] });
+    },
+  });
+  const invoke = useMutation({
+    mutationFn: ({ name, args = {} }: { name: string; args?: Record<string, unknown> }) =>
+      api.invokeComputerTool(name, args),
+    onSuccess: (value) => {
+      setResult(value);
+      void queryClient.invalidateQueries({ queryKey: ["computer-invocations"] });
+    },
+  });
+  const manualInvoke = useMutation({
+    mutationFn: ({ name, args }: { name: string; args: Record<string, unknown> }) =>
+      api.executeManualControl(
+        String(args.action_id),
+        typeof args.desired_state === "boolean" ? args.desired_state : undefined,
+      ),
+    onSuccess: (value) => {
+      setResult(value);
+      void bridge.refetch();
+      void queryClient.invalidateQueries({ queryKey: ["computer-invocations"] });
+    },
+  });
+  const command = useMutation({
+    mutationFn: (text: string) => api.runComputerCommand(text, commandSession),
+    onSuccess: (value) => {
+      setCommandSession(value.session_id);
+      setTranscript((current) => [...current.slice(-19), value]);
+      setCommandText("");
+      if (value.invocations.length) setResult(value.invocations.at(-1) ?? null);
+      if (settings) speechOutput.speak(value.reply, settings);
+      void queryClient.invalidateQueries({ queryKey: ["computer-invocations"] });
+    },
+  });
+  const startSpeech = useMutation({
+    mutationFn: api.startSpeechInput,
+    onSuccess: (value) => queryClient.setQueryData(["computer-speech-input"], value),
+  });
+  const stopSpeech = useMutation({
+    mutationFn: () => api.stopSpeechInput(commandSession),
+    onSuccess: (value) => {
+      setListening(false);
+      setSpeechMessage(
+        value.accepted
+          ? `Recognized at ${Math.round(value.confidence * 100)}% confidence.`
+          : value.reason ?? "No speech was recognized.",
+      );
+      if (value.command) {
+        setCommandSession(value.command.session_id);
+        setTranscript((current) => [...current.slice(-19), value.command!]);
+        if (value.command.invocations.length) {
+          setResult(value.command.invocations.at(-1) ?? null);
+        }
+        if (settings) speechOutput.speak(value.command.reply, settings);
+      }
+      void speech.refetch();
+      void queryClient.invalidateQueries({ queryKey: ["computer-invocations"] });
+    },
+    onError: (error) => {
+      setListening(false);
+      setSpeechMessage(error.message);
+      void speech.refetch();
+    },
+  });
+  const emergency = useMutation({
+    mutationFn: (disabled: boolean) =>
+      disabled ? api.emergencyDisableInputBridge() : api.resetInputBridge(),
+    onSuccess: (value) => queryClient.setQueryData(["computer-input-bridge"], value),
+  });
+  const resolve = useMutation({
+    mutationFn: ({ id, approve }: { id: string; approve: boolean }) =>
+      api.resolveComputerConfirmation(id, approve),
+    onSuccess: (value) => {
+      setResult(value);
+      void queryClient.invalidateQueries({ queryKey: ["computer-invocations"] });
+    },
+  });
+  const acknowledge = useMutation({
+    mutationFn: api.acknowledgeComputerAlert,
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["computer-alerts"] }),
+  });
+  const snooze = useMutation({
+    mutationFn: (category: string) => api.snoozeComputerAlerts(category, 30),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["computer-alerts"] }),
+  });
+  const evaluateModel = useMutation({
+    mutationFn: api.evaluateComputerModel,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["computer-models"] });
+      void queryClient.invalidateQueries({ queryKey: ["computer-status"] });
+    },
+  });
+  const stopModel = useMutation({
+    mutationFn: api.stopComputerModel,
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["computer-models"] }),
+  });
+  const deleteLocalData = useMutation({
+    mutationFn: () => api.deleteComputerData({
+      confirmation: deletionPhrase,
+      delete_audit: true,
+      delete_alerts: true,
+      delete_models: deleteModels,
+      reset_computer_settings: false,
+    }),
+    onSuccess: () => {
+      setDeletionPhrase("");
+      void queryClient.invalidateQueries({ queryKey: ["computer-alerts"] });
+      void queryClient.invalidateQueries({ queryKey: ["computer-invocations"] });
+      void queryClient.invalidateQueries({ queryKey: ["computer-models"] });
+      void queryClient.invalidateQueries({ queryKey: ["computer-privacy"] });
+    },
+  });
+  const settings = status.data?.settings;
+  useEffect(() => {
+    if (settings) setBindingsDirectory(settings.bindings_directory);
+  }, [settings?.bindings_directory]);
+  useEffect(() => {
+    if (!settings) return;
+    setModelServerPath(settings.model_server_path);
+    setLiteManifest(settings.lite_model_manifest);
+    setEnhancedManifest(settings.enhanced_model_manifest);
+  }, [settings?.model_server_path, settings?.lite_model_manifest, settings?.enhanced_model_manifest]);
+  useEffect(() => {
+    if (!settings?.speech_output_enabled) return;
+    const hasCritical = (alerts.data ?? []).some((alert) => alert.severity === "critical");
+    speechOutput.setCriticalFlightState(hasCritical);
+    for (const alert of alerts.data ?? []) {
+      if (
+        alert.severity === "critical"
+        && alert.interrupt_allowed
+        && !announcedAlerts.current.has(alert.id)
+      ) {
+        announcedAlerts.current.add(alert.id);
+        speechOutput.speak(`${alert.title}. ${alert.message}`, settings, "critical");
+      }
+    }
+    return () => speechOutput.setCriticalFlightState(false);
+  }, [alerts.data, settings]);
+  useEffect(() => {
+    const focusCommand = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.code === "Space") {
+        event.preventDefault();
+        commandInput.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", focusCommand);
+    return () => window.removeEventListener("keydown", focusCommand);
+  }, []);
+  useEffect(() => {
+    const refreshVoices = () => setVoices(speechOutput.voices());
+    refreshVoices();
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.addEventListener("voiceschanged", refreshVoices);
+      return () => window.speechSynthesis.removeEventListener("voiceschanged", refreshVoices);
+    }
+  }, []);
+  const patch = (change: Partial<ComputerPreferences>) => {
+    if (settings) save.mutate({ ...settings, ...change });
+  };
+  const setMode = (mode: ComputerPreferences["mode"]) => {
+    patch({ mode, enabled: mode !== "off" });
+  };
+  const toggleAction = (actionId: string, enabled: boolean) => {
+    if (!settings) return;
+    const actions = enabled
+      ? [...new Set([...settings.enabled_game_actions, actionId])]
+      : settings.enabled_game_actions.filter((value) => value !== actionId);
+    patch({ enabled_game_actions: actions });
+  };
+  const runArguments: Record<string, Record<string, unknown>> = {
+    open_ion_view: { view: "home" },
+    show_information_card: {
+      title: "Computer link test",
+      body: "The policy-gated ION interface channel is responding.",
+      tone: "success",
+    },
+  };
+  const bindingByAction = new globalThis.Map<string, BindingCapability>(
+    (bindings.data?.capabilities ?? []).map((capability) => [capability.action_id, capability]),
+  );
+  const submitCommand = (text = commandText) => {
+    const value = text.trim();
+    if (value && !command.isPending) command.mutate(value);
+  };
+  const beginPushToTalk = () => {
+    if (
+      listening
+      || startSpeech.isPending
+      || settings?.speech_input_mode !== "push_to_talk"
+    ) return;
+    setSpeechMessage("Listening through the Windows default microphone…");
+    setListening(true);
+    listeningStart.current = startSpeech.mutateAsync().catch((error: Error) => {
+      setListening(false);
+      setSpeechMessage(error.message);
+      throw error;
+    });
+  };
+  const endPushToTalk = async () => {
+    if (!listening || stopSpeech.isPending) return;
+    try {
+      await listeningStart.current;
+      stopSpeech.mutate();
+    } catch {
+      // The start mutation already exposed the local recognizer error.
+    } finally {
+      listeningStart.current = null;
+    }
+  };
+  const manualControl = (
+    tool: "set_ship_system" | "open_game_interface" | "set_power_distribution",
+    actionId: string,
+    desiredState?: boolean,
+  ) => {
+    manualInvoke.mutate({
+      name: tool,
+      args: {
+        action_id: actionId,
+        ...(desiredState === undefined ? {} : { desired_state: desiredState }),
+      },
+    });
+  };
+  const controlReady = (actionId: string) => {
+    const capability = bindingByAction.get(actionId);
+    return Boolean(
+      settings?.class_b_enabled
+      && settings.enabled_game_actions.includes(actionId)
+      && capability?.ion_status === "ready"
+      && bridge.data?.available
+      && !bridge.data.emergency_disabled,
+    );
+  };
+  const runnableWithoutInput = new Set([
+    "get_operational_snapshot",
+    "get_ship_state",
+    "get_navigation_state",
+    "get_cargo_manifest",
+    "get_control_capabilities",
+    "inspect_current_system",
+    "get_active_operation",
+    "get_next_instruction",
+    "open_route_console",
+    "show_diagnostics",
+    "open_ion_view",
+    "show_information_card",
+  ]);
+
+  return (
+    <div className="page wide computer-page">
+      <PageHeader
+        eyebrow="ION / Computer"
+        title="Computer command and control."
+        body="Use deterministic typed commands or explicit one-shot Elite controls. Every action remains allowlisted, policy-gated, local, and auditable."
+      />
+      {status.data?.warnings.map((warning) => <Notice key={warning} tone="warning">{warning}</Notice>)}
+
+      <section className="planner-panel computer-settings">
+        <div className="results-heading">
+          <div><span className="eyebrow">C1 / runtime policy</span><h2>Computer settings</h2></div>
+          <button className="secondary" disabled={reset.isPending} onClick={() => reset.mutate()}><RotateCcw size={16} /> Reset safe defaults</button>
+        </div>
+        <div className="computer-settings-grid">
+          <label className="field"><span>Operating mode</span>
+            <select value={settings?.mode ?? "off"} onChange={(event) => setMode(event.target.value as ComputerPreferences["mode"])}>
+              <option value="off">Off</option>
+              <option value="command">Command foundation · tool console</option>
+              <option value="lite" disabled={!models.data?.lite?.verified}>Lite · {models.data?.lite?.verified ? "verified local component" : "not installed"}</option>
+              <option value="enhanced" disabled={!models.data?.enhanced?.verified}>Enhanced · {models.data?.enhanced?.verified ? "verified local component" : "not installed"}</option>
+              <option value="automatic" disabled={!models.data?.lite?.verified && !models.data?.enhanced?.verified}>Automatic · hardware selection</option>
+            </select>
+          </label>
+          <label className="field"><span>Response detail</span>
+            <select value={settings?.verbosity ?? "standard"} onChange={(event) => patch({ verbosity: event.target.value as ComputerPreferences["verbosity"] })}>
+              <option value="brief">Brief</option><option value="standard">Standard</option><option value="detailed">Detailed</option><option value="silent">Silent</option>
+            </select>
+          </label>
+          <label className="field"><span>Proactivity</span>
+            <select value={settings?.proactivity ?? "critical"} onChange={(event) => patch({ proactivity: event.target.value as ComputerPreferences["proactivity"] })}>
+              <option value="silent">Silent</option><option value="critical">Critical only</option><option value="operational">Operational</option><option value="conversational">Conversational</option>
+            </select>
+          </label>
+          <label className="field"><span>Confirmation policy</span>
+            <select value={settings?.confirmation_policy ?? "recommended"} onChange={(event) => patch({ confirmation_policy: event.target.value as ComputerPreferences["confirmation_policy"] })}>
+              <option value="always">Always confirm controls</option><option value="recommended">Recommended</option><option value="minimal">Minimal</option>
+            </select>
+          </label>
+        </div>
+        <label className="toggle"><input type="checkbox" checked={settings?.address_as_commander ?? true} onChange={(event) => patch({ address_as_commander: event.target.checked })} /><span className="switch">●</span>Address me as Commander</label>
+        <div className="runtime-strip">
+          {Object.entries(status.data?.runtimes ?? {}).map(([name, value]) => <div key={name}><span>{name.replaceAll("_", " ")}</span><strong>{value.replaceAll("_", " ")}</strong></div>)}
+        </div>
+        <div className="voice-settings">
+          <div>
+            <span className="eyebrow">C6 / local voice output</span>
+            <h3>Installed Edge voices</h3>
+            <p>Replies stay visible if speech is disabled or a voice fails. Critical announcements can interrupt and clear ordinary queued speech.</p>
+          </div>
+          <label className="toggle"><input type="checkbox" checked={settings?.speech_output_enabled ?? false} onChange={(event) => patch({ speech_output_enabled: event.target.checked })} /><span className="switch">●</span>Speak Computer replies</label>
+          <label className="field"><span>Voice</span>
+            <select value={settings?.speech_voice ?? ""} onChange={(event) => patch({ speech_voice: event.target.value })}>
+              <option value="">Windows default</option>
+              {voices.map((voice) => <option key={voice.voiceURI} value={voice.voiceURI}>{voice.name} · {voice.lang}</option>)}
+            </select>
+          </label>
+          <label className="field"><span>Rate · {(settings?.speech_rate ?? 1).toFixed(1)}×</span><input type="range" min=".5" max="2" step=".1" value={settings?.speech_rate ?? 1} onChange={(event) => patch({ speech_rate: Number(event.target.value) })} /></label>
+          <label className="field"><span>Volume · {Math.round((settings?.speech_volume ?? 1) * 100)}%</span><input type="range" min="0" max="1" step=".05" value={settings?.speech_volume ?? 1} onChange={(event) => patch({ speech_volume: Number(event.target.value) })} /></label>
+          <div className="voice-actions">
+            <button className="secondary" disabled={!settings?.speech_output_enabled} onClick={() => settings && speechOutput.speak("ION Computer voice output online.", settings)}><Volume2 size={16} /> Test voice</button>
+            <button className="secondary" onClick={() => speechOutput.dismiss()}><VolumeX size={16} /> Dismiss speech</button>
+          </div>
+        </div>
+      </section>
+
+      <section className="planner-panel alert-panel" aria-labelledby="computer-alerts-heading">
+        <div className="results-heading">
+          <div><span className="eyebrow">C9 / deterministic monitoring</span><h2 id="computer-alerts-heading">Operational alerts</h2></div>
+          <Bell size={24} />
+        </div>
+        <p className="muted">Alerts are derived from journal facts, deduplicated by a stable fingerprint, and cooled down locally. Only critical safety alerts may interrupt speech.</p>
+        {(alerts.data ?? []).length === 0 && <p className="muted" role="status">No active alerts.</p>}
+        <div className="computer-alerts" aria-live="polite">
+          {(alerts.data ?? []).map((alert) => (
+            <article key={alert.id} className={alert.severity} role={alert.severity === "critical" ? "alert" : "status"}>
+              <div>
+                <span>{alert.severity} · {alert.category.replaceAll("_", " ")}</span>
+                <h3>{alert.title}</h3>
+                <p>{alert.message}</p>
+                {Object.keys(alert.facts).length > 0 && <small>Facts: {Object.entries(alert.facts).map(([key, value]) => `${key.replaceAll("_", " ")} ${String(value)}`).join(" · ")}</small>}
+              </div>
+              <div className="alert-actions">
+                <button className="secondary" disabled={acknowledge.isPending} onClick={() => acknowledge.mutate(alert.id)}>Acknowledge</button>
+                {alert.severity !== "critical" && <button className="secondary" disabled={snooze.isPending} onClick={() => snooze.mutate(alert.category)}>Snooze 30m</button>}
+              </div>
+            </article>
+          ))}
+        </div>
+        <details className="alert-preferences">
+          <summary>Noncritical category preferences</summary>
+          <div>
+            {configurableAlertCategories.map((category) => {
+              const disabledCategories = settings?.disabled_alert_categories ?? [];
+              const enabled = !disabledCategories.includes(category);
+              return (
+                <label className="toggle" key={category}>
+                  <input
+                    type="checkbox"
+                    checked={enabled}
+                    disabled={!settings || save.isPending}
+                    onChange={(event) => {
+                      if (!settings) return;
+                      const disabled = event.target.checked
+                        ? disabledCategories.filter((value) => value !== category)
+                        : [...new Set([...disabledCategories, category])];
+                      patch({ disabled_alert_categories: disabled });
+                    }}
+                  />
+                  <span className="switch">●</span>{category.replaceAll("_", " ")}
+                </label>
+              );
+            })}
+          </div>
+        </details>
+      </section>
+
+      <section className="planner-panel model-panel">
+        <div className="results-heading">
+          <div><span className="eyebrow">C10–C11 / optional local models</span><h2>Lite and Enhanced runtimes</h2></div>
+          <Cpu size={24} />
+        </div>
+        <Notice tone="info">Models are optional, removable local components. They can only select non-control tools; actual facts and actions still come from ION's deterministic policy executor. Live Elite telemetry is withheld from generative runtimes pending written Frontier clarification.</Notice>
+        <label className="toggle"><input type="checkbox" checked={settings?.model_runtime_enabled ?? false} onChange={(event) => patch({ model_runtime_enabled: event.target.checked })} /><span className="switch">●</span>Enable local-model runtime</label>
+        <div className="model-paths">
+          <label className="field"><span>llama.cpp server executable</span><input value={modelServerPath} onChange={(event) => setModelServerPath(event.target.value)} placeholder="C:\path\to\llama-server.exe" /></label>
+          <label className="field"><span>Lite manifest</span><input value={liteManifest} onChange={(event) => setLiteManifest(event.target.value)} placeholder="models\lite\manifest.json" /></label>
+          <label className="field"><span>Enhanced manifest</span><input value={enhancedManifest} onChange={(event) => setEnhancedManifest(event.target.value)} placeholder="models\enhanced\manifest.json" /></label>
+          <button className="secondary" disabled={!settings || save.isPending} onClick={() => patch({ model_server_path: modelServerPath, lite_model_manifest: liteManifest, enhanced_model_manifest: enhancedManifest })}>Apply paths</button>
+        </div>
+        <div className="model-limits">
+          <label className="field"><span>Context tokens</span><input type="number" min="512" max="8192" step="256" value={settings?.model_context_tokens ?? 2048} onChange={(event) => patch({ model_context_tokens: Number(event.target.value) })} /></label>
+          <label className="field"><span>Memory limit (MB)</span><input type="number" min="1024" max="65536" step="512" value={settings?.model_memory_limit_mb ?? 8192} onChange={(event) => patch({ model_memory_limit_mb: Number(event.target.value) })} /></label>
+          <label className="field"><span>GPU layers</span><input type="number" min="0" max="999" value={settings?.model_gpu_layers ?? 0} onChange={(event) => patch({ model_gpu_layers: Number(event.target.value) })} /></label>
+        </div>
+        <div className="model-status-grid">
+          <article><span>LITE</span><strong>{models.data?.lite?.status?.replaceAll("_", " ") ?? "checking"}</strong><small>{models.data?.lite?.version ?? "No verified component"}</small></article>
+          <article><span>ENHANCED</span><strong>{models.data?.enhanced?.status?.replaceAll("_", " ") ?? "checking"}</strong><small>{models.data?.enhanced?.version ?? "No verified component"}</small></article>
+          <article><span>HARDWARE</span><strong>{models.data?.hardware?.cpu_threads ?? "—"} threads · {Math.round((models.data?.hardware?.total_ram_mb ?? 0) / 1024)} GB RAM</strong><small>GPU layers are explicitly configured</small></article>
+          <article><span>EVALUATION</span><strong>{models.data?.evaluation_current ? "PASSED" : "REQUIRED"}</strong><small>{models.data?.evaluation_score == null ? "Not run" : `${Math.round(models.data.evaluation_score * 100)}% · threshold ${Math.round(models.data.evaluation_threshold * 100)}%`}</small></article>
+        </div>
+        <div className="model-actions">
+          <button className="primary" disabled={!settings?.model_runtime_enabled || !models.data?.server_available || evaluateModel.isPending || !["lite", "enhanced", "automatic"].includes(settings?.mode ?? "")} onClick={() => evaluateModel.mutate()}><Gauge size={16} /> Run compatibility evaluation</button>
+          <button className="secondary" disabled={!models.data?.running || stopModel.isPending} onClick={() => stopModel.mutate()}>Stop local runtime</button>
+        </div>
+        {models.data?.last_error && <Notice tone="warning">{models.data.last_error}</Notice>}
+        {evaluateModel.error && <Notice tone="warning">{evaluateModel.error.message}</Notice>}
+      </section>
+
+      <section className="planner-panel command-console">
+        <div className="results-heading">
+          <div><span className="eyebrow">C5 / deterministic command mode</span><h2>Computer console</h2></div>
+          <span className="command-shortcut">Ctrl + Space</span>
+        </div>
+        <p className="muted">{settings?.mode === "command" ? "No language model is used. Supported phrases are matched locally and routed through the same audited tools as the manual controls." : "The selected local runtime may interpret the request, but deterministic Command mode takes over automatically if the component or evaluation is unavailable."}</p>
+        <div className="command-transcript" aria-live="polite">
+          {transcript.length === 0 && <p className="muted">Computer standing by. Select a suggestion or enter a supported command.</p>}
+          {transcript.map((entry, index) => (
+            <article key={`${entry.session_id}-${index}`}>
+              <div><span>COMMANDER</span><p>{entry.text}</p></div>
+              <div className={entry.clarification ? "clarification" : ""}><span>ION COMPUTER · {Math.round(entry.confidence * 100)}%</span><p>{entry.reply}</p></div>
+            </article>
+          ))}
+        </div>
+        <form className="command-entry" onSubmit={(event) => { event.preventDefault(); submitCommand(); }}>
+          <input
+            ref={commandInput}
+            value={commandText}
+            onChange={(event) => setCommandText(event.target.value)}
+            placeholder={settings?.enabled ? "Enter command…" : "Enable Command mode to begin"}
+            disabled={!settings?.enabled}
+            aria-label="Computer command"
+          />
+          <button className="primary" type="submit" disabled={!commandText.trim() || command.isPending || !settings?.enabled}><Send size={16} /> Execute</button>
+          <button
+            className={`push-to-talk ${listening ? "listening" : ""}`}
+            type="button"
+            disabled={
+              !speech.data?.available
+              || settings?.speech_input_mode !== "push_to_talk"
+              || stopSpeech.isPending
+            }
+            onPointerDown={(event) => {
+              event.currentTarget.setPointerCapture(event.pointerId);
+              beginPushToTalk();
+            }}
+            onPointerUp={() => void endPushToTalk()}
+            onPointerCancel={() => void endPushToTalk()}
+          ><Mic size={16} /> {listening ? "Release to execute" : "Hold to talk"}</button>
+        </form>
+        <div className="speech-input-settings">
+          <label className="field"><span>Speech activation</span>
+            <select value={settings?.speech_input_mode ?? "disabled"} onChange={(event) => patch({ speech_input_mode: event.target.value as ComputerPreferences["speech_input_mode"] })}>
+              <option value="disabled">Disabled</option>
+              <option value="push_to_talk">Push to talk · local</option>
+              <option disabled>Wake word · separately gated</option>
+            </select>
+          </label>
+          <label className="field"><span>Action confidence · {Math.round((settings?.speech_confidence_threshold ?? .85) * 100)}%</span><input type="range" min=".5" max="1" step=".01" value={settings?.speech_confidence_threshold ?? .85} onChange={(event) => patch({ speech_confidence_threshold: Number(event.target.value) })} /></label>
+          <div><span className="eyebrow">{speech.data?.active || listening ? "Microphone listening" : "Microphone muted"}</span><p>{speech.data?.microphone ?? "Windows default input"} · local only · wake word disabled</p></div>
+        </div>
+        {speechMessage && <Notice tone="info">{speechMessage}</Notice>}
+        <div className="command-suggestions">
+          {(transcript.at(-1)?.suggestions ?? ["Brief me", "Where am I?", "What is my next stop?", "Find a round trip within 100 ly", "Open route console"]).map((suggestion) => (
+            <button className="secondary" key={suggestion} disabled={!settings?.enabled || command.isPending} onClick={() => submitCommand(suggestion)}>{suggestion}</button>
+          ))}
+        </div>
+        {command.error && <Notice tone="warning">{command.error.message}</Notice>}
+      </section>
+
+      <section className="planner-panel computer-tool-console">
+        <div className="results-heading"><div><span className="eyebrow">C2 / audited execution</span><h2>Safe ION tools</h2></div><Terminal size={24} /></div>
+        <p className="muted">Every run passes through policy, uses structured arguments and results, and is written to the local audit log.</p>
+        <div className="computer-tools">
+          {(tools.data ?? []).map((tool) => (
+            <article key={tool.name} className={tool.implementation_status === "available" ? "available" : ""}>
+              <div><span>{tool.category} · {tool.permission}</span><h3>{tool.name.replaceAll("_", " ")}</h3><p>{tool.description}</p></div>
+              <button
+                className="secondary"
+                disabled={!settings?.enabled || tool.implementation_status !== "available" || !runnableWithoutInput.has(tool.name) || invoke.isPending}
+                onClick={() => invoke.mutate({ name: tool.name, args: runArguments[tool.name] })}
+              >{tool.implementation_status === "available" ? "Run" : "Planned"}</button>
+            </article>
+          ))}
+        </div>
+        {invoke.error && <Notice tone="warning">{invoke.error.message}</Notice>}
+        {result && (
+          <div className={`computer-result ${result.status}`}>
+            <div className="results-heading"><div><span className="eyebrow">Latest invocation</span><h3>{result.tool_name.replaceAll("_", " ")}</h3></div><strong>{result.status.replaceAll("_", " ")}</strong></div>
+            {result.error && <Notice tone="warning">{result.error}</Notice>}
+            {result.confirmation_id && result.status === "awaiting_confirmation" && <div className="confirmation-actions"><button className="primary" onClick={() => resolve.mutate({ id: result.confirmation_id!, approve: true })}>Confirm</button><button className="secondary" onClick={() => resolve.mutate({ id: result.confirmation_id!, approve: false })}>Reject</button></div>}
+            {result.result && <pre>{JSON.stringify(result.result, null, 2)}</pre>}
+          </div>
+        )}
+      </section>
+
+      <section className="planner-panel bindings-panel">
+        <div className="results-heading"><div><span className="eyebrow">C3 / read-only discovery</span><h2>Elite control bindings</h2></div><Keyboard size={24} /></div>
+        <div className="path-picker">
+          <input value={bindingsDirectory} onChange={(event) => setBindingsDirectory(event.target.value)} placeholder="Default Elite Options\\Bindings folder" />
+          <button className="secondary" onClick={() => void desktopCall<string>("choose_bindings_folder").then((path) => path && setBindingsDirectory(path))}>Browse…</button>
+          <button className="secondary" disabled={!settings || save.isPending} onClick={() => patch({ bindings_directory: bindingsDirectory })}>Apply</button>
+          <button className="secondary" onClick={() => void bindings.refetch()}><RefreshCw size={16} /> Refresh</button>
+        </div>
+        {bindings.data?.warning && <Notice tone="warning">{bindings.data.warning}</Notice>}
+        {bindings.data?.available && <p className="muted">Preset <strong>{bindings.data.preset}</strong> · {bindings.data.file_name} · devices: {bindings.data.device_kinds.join(", ") || "none"} · conflicts: {bindings.data.conflict_count}</p>}
+
+        <div className="class-b-master">
+          <div><span className="eyebrow">Class B controls</span><h3>Per-action permissions</h3><p>Manual controls remain available when Computer mode is Off. Elite must be foreground and each action needs a conflict-free keyboard binding.</p></div>
+          <label className="toggle"><input type="checkbox" checked={settings?.class_b_enabled ?? false} onChange={(event) => patch({ class_b_enabled: event.target.checked })} /><span className="switch">●</span>Class B master switch</label>
+        </div>
+        <div className={`bridge-status ${bridge.data?.emergency_disabled ? "disabled" : bridge.data?.busy ? "busy" : ""}`}>
+          <div>
+            <span className="eyebrow">C4 / local Input Bridge</span>
+            <h3>{bridge.data?.emergency_disabled ? "EMERGENCY DISABLED" : bridge.data?.busy ? `EXECUTING ${bridge.data.active_action?.replaceAll("_", " ")}` : bridge.data?.available ? "READY FOR FOREGROUND CHECK" : "WINDOWS ONLY"}</h3>
+            <p>Emergency hotkey: {bridge.data?.emergency_hotkey ?? "Ctrl + Shift + Pause"}. ION never accepts a raw key or retries a timed-out toggle.</p>
+          </div>
+          <button className={bridge.data?.emergency_disabled ? "primary" : "secondary danger"} disabled={emergency.isPending} onClick={() => emergency.mutate(!bridge.data?.emergency_disabled)}>
+            <AlertOctagon size={16} /> {bridge.data?.emergency_disabled ? "Re-arm bridge" : "Emergency disable"}
+          </button>
+        </div>
+        <div className="manual-control-deck">
+          <ControlButton label="Gear down" ready={controlReady("landing_gear")} pending={manualInvoke.isPending} onClick={() => manualControl("set_ship_system", "landing_gear", true)} />
+          <ControlButton label="Gear up" ready={controlReady("landing_gear")} pending={manualInvoke.isPending} onClick={() => manualControl("set_ship_system", "landing_gear", false)} />
+          <ControlButton label="Scoop deploy" ready={controlReady("cargo_scoop")} pending={manualInvoke.isPending} onClick={() => manualControl("set_ship_system", "cargo_scoop", true)} />
+          <ControlButton label="Scoop retract" ready={controlReady("cargo_scoop")} pending={manualInvoke.isPending} onClick={() => manualControl("set_ship_system", "cargo_scoop", false)} />
+          <ControlButton label="Lights on" ready={controlReady("ship_lights")} pending={manualInvoke.isPending} onClick={() => manualControl("set_ship_system", "ship_lights", true)} />
+          <ControlButton label="Lights off" ready={controlReady("ship_lights")} pending={manualInvoke.isPending} onClick={() => manualControl("set_ship_system", "ship_lights", false)} />
+          <ControlButton label="Night vision on" ready={controlReady("night_vision")} pending={manualInvoke.isPending} onClick={() => manualControl("set_ship_system", "night_vision", true)} />
+          <ControlButton label="Night vision off" ready={controlReady("night_vision")} pending={manualInvoke.isPending} onClick={() => manualControl("set_ship_system", "night_vision", false)} />
+          <ControlButton label="Hardpoints deploy" ready={controlReady("hardpoints")} pending={manualInvoke.isPending} onClick={() => manualControl("set_ship_system", "hardpoints", true)} />
+          <ControlButton label="Hardpoints retract" ready={controlReady("hardpoints")} pending={manualInvoke.isPending} onClick={() => manualControl("set_ship_system", "hardpoints", false)} />
+          <ControlButton label="Galaxy map" ready={controlReady("galaxy_map")} pending={manualInvoke.isPending} onClick={() => manualControl("open_game_interface", "galaxy_map")} />
+          <ControlButton label="System map" ready={controlReady("system_map")} pending={manualInvoke.isPending} onClick={() => manualControl("open_game_interface", "system_map")} />
+          <ControlButton label="Navigation panel" ready={controlReady("navigation_panel")} pending={manualInvoke.isPending} onClick={() => manualControl("open_game_interface", "navigation_panel")} />
+          <ControlButton label="Communications" ready={controlReady("communications_panel")} pending={manualInvoke.isPending} onClick={() => manualControl("open_game_interface", "communications_panel")} />
+          <ControlButton label="Role panel" ready={controlReady("role_panel")} pending={manualInvoke.isPending} onClick={() => manualControl("open_game_interface", "role_panel")} />
+          <ControlButton label="Internal panel" ready={controlReady("internal_panel")} pending={manualInvoke.isPending} onClick={() => manualControl("open_game_interface", "internal_panel")} />
+          <ControlButton label="Balance power" ready={controlReady("power_balance")} pending={manualInvoke.isPending} onClick={() => manualControl("set_power_distribution", "power_balance")} />
+          <ControlButton label="Power to engines" ready={controlReady("power_engines")} pending={manualInvoke.isPending} onClick={() => manualControl("set_power_distribution", "power_engines")} />
+          <ControlButton label="Power to systems" ready={controlReady("power_systems")} pending={manualInvoke.isPending} onClick={() => manualControl("set_power_distribution", "power_systems")} />
+          <ControlButton label="Power to weapons" ready={controlReady("power_weapons")} pending={manualInvoke.isPending} onClick={() => manualControl("set_power_distribution", "power_weapons")} />
+        </div>
+        {manualInvoke.error && <Notice tone="warning">{manualInvoke.error.message}</Notice>}
+        <div className="control-capabilities">
+          {(controls.data ?? []).map((control) => {
+            const capability = bindingByAction.get(control.action_id);
+            return <ControlCapabilityRow key={control.action_id} control={control} capability={capability} enabled={settings?.enabled_game_actions.includes(control.action_id) ?? false} onToggle={toggleAction} />;
+          })}
+        </div>
+      </section>
+
+      <section className="planner-panel audit-panel">
+        <div className="results-heading"><div><span className="eyebrow">Local audit</span><h2>Recent invocations</h2></div><ShieldCheck size={24} /></div>
+        {(invocations.data ?? []).length === 0 && <p className="muted">No Computer tools have been invoked.</p>}
+        {(invocations.data ?? []).map((invocation) => <div className="audit-row" key={invocation.id}><span>{new Date(invocation.created_at).toLocaleTimeString()}</span><strong>{invocation.tool_name.replaceAll("_", " ")}</strong><b>{invocation.status.replaceAll("_", " ")}</b></div>)}
+      </section>
+
+      <section className="planner-panel privacy-panel">
+        <div className="results-heading"><div><span className="eyebrow">C12 / privacy and recovery</span><h2>Local Computer data</h2></div><Trash2 size={24} /></div>
+        <p className="muted">ION reads Elite journals and bindings without modifying them. Computer models never use remote APIs, and local generative runtimes currently receive no live Elite context.</p>
+        <div className="privacy-stats">
+          <article><span>INVOCATIONS</span><strong>{privacy.data?.invocations ?? "—"}</strong></article>
+          <article><span>ALERT RECORDS</span><strong>{privacy.data?.alerts ?? "—"}</strong></article>
+          <article><span>MODEL STORAGE</span><strong>{formatBytes(privacy.data?.model_bytes ?? 0)}</strong></article>
+        </div>
+        <div className="deletion-control">
+          <label className="field"><span>Type DELETE LOCAL COMPUTER DATA to erase audit and alert history</span><input value={deletionPhrase} onChange={(event) => setDeletionPhrase(event.target.value)} /></label>
+          <label className="toggle"><input type="checkbox" checked={deleteModels} onChange={(event) => setDeleteModels(event.target.checked)} /><span className="switch">●</span>Also remove installed model files</label>
+          <button className="secondary danger" disabled={deletionPhrase !== "DELETE LOCAL COMPUTER DATA" || deleteLocalData.isPending} onClick={() => deleteLocalData.mutate()}><Trash2 size={16} /> Delete selected local data</button>
+        </div>
+        {deleteLocalData.error && <Notice tone="warning">{deleteLocalData.error.message}</Notice>}
+      </section>
+    </div>
+  );
+}
+
+function ControlButton({ label, ready, pending, onClick }: { label: string; ready: boolean; pending: boolean; onClick: () => void }) {
+  return <button className="control-button" disabled={!ready || pending} onClick={onClick}>{label}</button>;
+}
+
+function ControlCapabilityRow({ control, capability, enabled, onToggle }: { control: { action_id: string; label: string; permission: string; description: string }; capability?: BindingCapability; enabled: boolean; onToggle: (actionId: string, enabled: boolean) => void }) {
+  const binding = [capability?.secondary, capability?.primary].find((value) => value?.device_kind === "keyboard") ?? capability?.secondary ?? capability?.primary;
+  return (
+    <article className={`control-row ${control.permission === "game_amber" ? "amber" : "green"} ${capability?.status ?? "unbound"}`}>
+      <label className="toggle"><input type="checkbox" checked={enabled} onChange={(event) => onToggle(control.action_id, event.target.checked)} /><span className="switch">●</span></label>
+      <div><span>{control.permission === "game_amber" ? "AMBER" : "GREEN"} · {capability?.ion_status?.replaceAll("_", " ") ?? capability?.status ?? "unbound"}</span><h3>{control.label}</h3><p>{control.description}</p></div>
+      <div className="binding-readout"><strong>{binding?.display ?? "No binding found"}</strong>{capability?.conflicts.length ? <small>Conflicts: {capability.conflicts.join(", ")}</small> : <small>{capability?.elite_binding ?? "Elite action not found"}</small>}</div>
+    </article>
   );
 }
 

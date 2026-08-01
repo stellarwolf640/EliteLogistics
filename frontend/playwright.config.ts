@@ -21,7 +21,7 @@ export default defineConfig({
     command: `${pythonCommand} -m elite_logistics.main`,
     cwd: "..",
     url: "http://127.0.0.1:8765/api/health",
-    reuseExistingServer: false,
+    reuseExistingServer: process.env.ION_REUSE_EXISTING_SERVER === "1",
     timeout: 30_000,
     env: {
       ...process.env,

@@ -273,7 +273,218 @@ export interface Preferences {
     class_b_enabled: boolean;
     enabled_game_actions: string[];
     confirmation_policy: "always" | "recommended" | "minimal";
+    bindings_directory: string;
+    speech_output_enabled: boolean;
+    speech_voice: string;
+    speech_rate: number;
+    speech_volume: number;
+    speech_input_mode: "disabled" | "push_to_talk";
+    speech_confidence_threshold: number;
+    disabled_alert_categories: string[];
+    model_runtime_enabled: boolean;
+    model_server_path: string;
+    lite_model_manifest: string;
+    enhanced_model_manifest: string;
+    model_context_tokens: number;
+    model_memory_limit_mb: number;
+    model_gpu_layers: number;
+    model_evaluation_threshold: number;
+    model_evaluation_score: number | null;
+    model_evaluated_sha256: string;
   };
+}
+
+export type ComputerPreferences = Preferences["computer"];
+
+export interface ComputerTool {
+  name: string;
+  category: string;
+  description: string;
+  permission: "read" | "ion" | "game_green" | "game_amber" | "confirm";
+  initial_release: boolean;
+  requires_explicit_user: boolean;
+  requires_confirmation: boolean;
+  proactive_allowed: boolean;
+  implementation_status: "contract_only" | "available";
+}
+
+export interface ComputerControl {
+  action_id: string;
+  group: string;
+  label: string;
+  permission: "game_green" | "game_amber";
+  desired_state: boolean;
+  verifiable: boolean;
+  initial_release: boolean;
+  description: string;
+}
+
+export interface ComputerStatus {
+  foundation_version: number;
+  settings: ComputerPreferences;
+  runtimes: Record<string, string>;
+  catalog: {
+    tools: number;
+    initial_tools: number;
+    controls: number;
+    initial_controls: number;
+  };
+  execution_available: boolean;
+  executable_tools: string[];
+  warnings: string[];
+}
+
+export interface ComputerInvocation {
+  id: string;
+  tool_name: string;
+  source: string;
+  status: "queued" | "running" | "completed" | "failed" | "timed_out" | "denied" | "awaiting_confirmation" | "canceled" | "expired";
+  arguments: Record<string, unknown>;
+  result: Record<string, unknown> | null;
+  error: string | null;
+  confirmation_id: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface ComputerCommandResponse {
+  session_id: string;
+  text: string;
+  intent: string;
+  confidence: number;
+  clarification: string | null;
+  reply: string;
+  invocations: ComputerInvocation[];
+  suggestions: string[];
+  runtime?: string;
+  runtime_version?: string | null;
+  runtime_latency_ms?: number | null;
+  runtime_warning?: string | null;
+}
+
+export interface ComputerAlert {
+  id: string;
+  fingerprint: string;
+  category: string;
+  severity: "critical" | "warning" | "information";
+  title: string;
+  message: string;
+  facts: Record<string, unknown>;
+  status: "active" | "acknowledged" | "resolved";
+  interrupt_allowed: boolean;
+  created_at: string;
+  updated_at: string;
+  acknowledged_at: string | null;
+}
+
+export interface ComputerModelStatus {
+  enabled: boolean;
+  server_available: boolean;
+  server_path: string | null;
+  running: boolean;
+  active_tier: "lite" | "enhanced" | null;
+  active_version: string | null;
+  active_sha256: string | null;
+  lite: { verified: boolean; version: string | null; status: string };
+  enhanced: { verified: boolean; version: string | null; status: string };
+  hardware: {
+    cpu_threads: number;
+    total_ram_mb: number;
+    gpu_detection: string;
+    platform: string;
+  };
+  context_tokens: number;
+  memory_limit_mb: number;
+  gpu_layers: number;
+  evaluation_score: number | null;
+  evaluation_threshold: number;
+  evaluation_current: boolean;
+  last_latency_ms: number | null;
+  last_error: string | null;
+  safety: {
+    local_loopback_only: boolean;
+    live_elite_context: boolean;
+    direct_game_control: boolean;
+    permission_changes: boolean;
+    policy_executor_required: boolean;
+    frontier_public_release_clearance: boolean;
+  };
+}
+
+export interface ComputerPrivacyStatus {
+  profile: string;
+  models_directory: string;
+  model_bytes: number;
+  alerts: number;
+  invocations: number;
+  local_only: boolean;
+  remote_model_access: boolean;
+  elite_files_are_read_only: boolean;
+  generative_live_elite_context: boolean;
+}
+
+export interface SpeechInputStatus {
+  available: boolean;
+  active: boolean;
+  engine: string;
+  microphone: string;
+  activation: "push_to_talk";
+  wake_word_available: false;
+  local_only: true;
+}
+
+export interface SpeechRecognitionResult {
+  text: string;
+  confidence: number;
+  accepted: boolean;
+  threshold: number;
+  command: ComputerCommandResponse | null;
+  reason: string | null;
+}
+
+export interface InputBridgeStatus {
+  available: boolean;
+  platform: string;
+  emergency_disabled: boolean;
+  emergency_hotkey: string;
+  busy: boolean;
+  active_action: string | null;
+  last_result: Record<string, unknown> | null;
+  minimum_interval_seconds: number;
+}
+
+export interface BindingSlot {
+  device: string;
+  device_kind: "keyboard" | "mouse" | "controller" | "hotas" | "unknown";
+  key: string;
+  modifiers: string[];
+  display: string;
+}
+
+export interface BindingCapability {
+  action_id: string;
+  label: string;
+  elite_binding: string | null;
+  primary: BindingSlot | null;
+  secondary: BindingSlot | null;
+  status: "ready" | "unbound" | "conflict";
+  conflicts: string[];
+  ion_status?: "ready" | "unbound" | "conflict" | "requires_keyboard_binding" | "unsupported_keyboard_binding";
+  input_bridge_available?: boolean;
+}
+
+export interface BindingReport {
+  available: boolean;
+  configured_directory: string;
+  file_name: string | null;
+  preset: string | null;
+  major_version?: string | null;
+  minor_version?: string | null;
+  capabilities: BindingCapability[];
+  device_kinds: string[];
+  conflict_count: number;
+  warning: string | null;
+  input_bridge_available?: boolean;
 }
 
 export interface ActiveOperation {

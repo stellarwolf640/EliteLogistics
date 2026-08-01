@@ -12,6 +12,19 @@ import type {
   ActiveOperation,
   Diagnostics,
   UpdateStatus,
+  ComputerPreferences,
+  ComputerStatus,
+  ComputerTool,
+  ComputerControl,
+  ComputerInvocation,
+  ComputerCommandResponse,
+  InputBridgeStatus,
+  SpeechInputStatus,
+  SpeechRecognitionResult,
+  BindingReport,
+  ComputerAlert,
+  ComputerModelStatus,
+  ComputerPrivacyStatus,
 } from "./types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -46,6 +59,82 @@ export const api = {
   eliteStatus: () => request<EliteStatus>("/api/elite/status"),
   updateEliteSettings: (payload: { enabled: boolean; journal_directory: string; auto_apply_planning_state: boolean }) =>
     request<EliteStatus>("/api/elite/settings", { method: "PUT", body: JSON.stringify(payload) }),
+  computerStatus: () => request<ComputerStatus>("/api/computer/status"),
+  computerTools: () => request<ComputerTool[]>("/api/computer/tools"),
+  computerControls: () => request<ComputerControl[]>("/api/computer/controls"),
+  updateComputerSettings: (payload: ComputerPreferences) =>
+    request<ComputerPreferences>("/api/computer/settings", { method: "PUT", body: JSON.stringify(payload) }),
+  resetComputerSettings: () =>
+    request<ComputerPreferences>("/api/computer/settings/reset", { method: "POST" }),
+  computerBindings: () => request<BindingReport>("/api/computer/bindings"),
+  computerInvocations: () => request<ComputerInvocation[]>("/api/computer/invocations?limit=30"),
+  computerAlerts: () => request<ComputerAlert[]>("/api/computer/alerts"),
+  acknowledgeComputerAlert: (alertId: string) =>
+    request<ComputerAlert>(`/api/computer/alerts/${alertId}/acknowledge`, { method: "POST" }),
+  snoozeComputerAlerts: (category: string, minutes = 30) =>
+    request<{ category: string; until: string }>("/api/computer/alerts/snooze", {
+      method: "POST",
+      body: JSON.stringify({ category, minutes }),
+    }),
+  computerModelsStatus: () =>
+    request<ComputerModelStatus>("/api/computer/models/status"),
+  evaluateComputerModel: () =>
+    request<{ score: number; passed: boolean; threshold: number; model_sha256: string }>("/api/computer/models/evaluate", { method: "POST" }),
+  stopComputerModel: () =>
+    request<{ running: boolean }>("/api/computer/models/stop", { method: "POST" }),
+  computerPrivacy: () =>
+    request<ComputerPrivacyStatus>("/api/computer/privacy"),
+  deleteComputerData: (payload: {
+    confirmation: string;
+    delete_audit: boolean;
+    delete_alerts: boolean;
+    delete_models: boolean;
+    reset_computer_settings: boolean;
+  }) =>
+    request<Record<string, unknown>>("/api/computer/privacy/delete-local-data", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  invokeComputerTool: (tool_name: string, args: Record<string, unknown> = {}) =>
+    request<ComputerInvocation>("/api/computer/tools/invoke", {
+      method: "POST",
+      body: JSON.stringify({ tool_name, arguments: args, source: "explicit_user", timeout_seconds: 5 }),
+    }),
+  executeManualControl: (action_id: string, desired_state?: boolean) =>
+    request<ComputerInvocation>("/api/computer/controls/execute", {
+      method: "POST",
+      body: JSON.stringify({
+        action_id,
+        ...(desired_state === undefined ? {} : { desired_state }),
+        timeout_seconds: 5,
+      }),
+    }),
+  runComputerCommand: (text: string, session_id?: string) =>
+    request<ComputerCommandResponse>("/api/computer/commands", {
+      method: "POST",
+      body: JSON.stringify({ text, activation: "typed", session_id }),
+    }),
+  speechInputStatus: () =>
+    request<SpeechInputStatus>("/api/computer/speech-input/status"),
+  startSpeechInput: () =>
+    request<SpeechInputStatus>("/api/computer/speech-input/start", {
+      method: "POST",
+    }),
+  stopSpeechInput: (session_id?: string) =>
+    request<SpeechRecognitionResult>("/api/computer/speech-input/stop", {
+      method: "POST",
+      body: JSON.stringify({ session_id, execute: true }),
+    }),
+  inputBridgeStatus: () => request<InputBridgeStatus>("/api/computer/input-bridge"),
+  emergencyDisableInputBridge: () =>
+    request<InputBridgeStatus>("/api/computer/input-bridge/emergency-disable", { method: "POST" }),
+  resetInputBridge: () =>
+    request<InputBridgeStatus>("/api/computer/input-bridge/reset", { method: "POST" }),
+  resolveComputerConfirmation: (confirmationId: string, approve: boolean) =>
+    request<ComputerInvocation>(`/api/computer/confirmations/${confirmationId}`, {
+      method: "POST",
+      body: JSON.stringify({ approve, timeout_seconds: 5 }),
+    }),
   packInfo: () => request<{ url: string; bytes: number; available: boolean; error?: string }>("/api/data/spansh-pack-info"),
   locations: (query: string) =>
     request<LocationResult[]>(`/api/locations/search?q=${encodeURIComponent(query)}&limit=12`),

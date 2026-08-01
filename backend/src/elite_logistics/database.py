@@ -164,6 +164,68 @@ class Job(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class ComputerInvocation(Base):
+    __tablename__ = "computer_invocations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tool_name: Mapped[str] = mapped_column(String(100), index=True)
+    source: Mapped[str] = mapped_column(String(40))
+    status: Mapped[str] = mapped_column(String(30), index=True)
+    arguments: Mapped[dict] = mapped_column(JSON, default=dict)
+    result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    confirmation_id: Mapped[str | None] = mapped_column(
+        ForeignKey("computer_confirmations.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class ComputerConfirmation(Base):
+    __tablename__ = "computer_confirmations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tool_name: Mapped[str] = mapped_column(String(100))
+    source: Mapped[str] = mapped_column(String(40))
+    arguments: Mapped[dict] = mapped_column(JSON, default=dict)
+    arguments_hash: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(30), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class ComputerAlert(Base):
+    __tablename__ = "computer_alerts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), index=True)
+    category: Mapped[str] = mapped_column(String(80), index=True)
+    severity: Mapped[str] = mapped_column(String(20), index=True)
+    title: Mapped[str] = mapped_column(String(160))
+    message: Mapped[str] = mapped_column(Text)
+    facts: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(30), index=True, default="active")
+    interrupt_allowed: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    acknowledged_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class ComputerAlertSnooze(Base):
+    __tablename__ = "computer_alert_snoozes"
+
+    category: Mapped[str] = mapped_column(String(80), primary_key=True)
+    snoozed_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 settings = get_settings()
 connect_args = (
     {"check_same_thread": False, "timeout": 60}
@@ -211,6 +273,7 @@ def init_database() -> None:
     command.upgrade(config, "head")
     with Session(engine) as session:
         recover_interrupted_jobs(session)
+        recover_interrupted_computer(session)
 
 
 def recover_interrupted_jobs(session: Session) -> int:
@@ -223,6 +286,25 @@ def recover_interrupted_jobs(session: Session) -> int:
             status="failed",
             error="Interrupted when ION last stopped. Start the operation again.",
             updated_at=now,
+        )
+    )
+    session.commit()
+    return int(result.rowcount or 0)
+
+
+def recover_interrupted_computer(session: Session) -> int:
+    """A queued/running one-shot invocation cannot survive process shutdown."""
+    now = datetime.now(UTC)
+    result = session.execute(
+        update(ComputerInvocation)
+        .where(ComputerInvocation.status.in_(("queued", "running")))
+        .values(
+            status="failed",
+            error=(
+                "Interrupted when ION last stopped. The action was not retried; "
+                "review telemetry before issuing it again."
+            ),
+            completed_at=now,
         )
     )
     session.commit()

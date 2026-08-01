@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
@@ -15,12 +15,18 @@ from .config import get_settings
 from .computer import (
     FOUNDATION_VERSION as COMPUTER_FOUNDATION_VERSION,
     CONTROL_ACTIONS,
+    EXECUTABLE_TOOL_NAMES,
+    InvocationSource,
     TOOL_DEFINITIONS,
     control_catalog,
     tool_catalog,
 )
 from .database import (
     ActiveOperation,
+    ComputerAlert,
+    ComputerAlertSnooze,
+    ComputerConfirmation,
+    ComputerInvocation,
     DataImport,
     Job,
     MarketObservation,
@@ -48,6 +54,10 @@ from .schemas import (
     TradeSearchResponse,
     TransitRequest,
     PreferencesPayload,
+    ComputerPreferences,
+    ComputerCommandInput,
+    ComputerManualControlInput,
+    ComputerToolInvocationInput,
 )
 from .version import APP_VERSION
 from .updater import update_service
@@ -107,7 +117,11 @@ def health() -> dict:
 
 @router.get("/diagnostics")
 def diagnostics(session: Session = Depends(get_session)) -> dict:
+    from .computer_models import local_model_manager
+    from .speech_input import speech_recognizer
+
     settings = get_settings()
+    computer_preferences = _load_preferences(session).computer
     database_ok = True
     try:
         session.execute(select(1))
@@ -135,6 +149,7 @@ def diagnostics(session: Session = Depends(get_session)) -> dict:
             "logs": str(settings.paths.logs),
             "updates": str(settings.paths.updates),
             "webview": str(settings.paths.webview),
+            "models": str(settings.paths.models),
         },
         "database_ok": database_ok,
         "webview2_available": (
@@ -143,6 +158,10 @@ def diagnostics(session: Session = Depends(get_session)) -> dict:
             else None
         ),
         "game_link": elite_status(session),
+        "computer": {
+            "models": local_model_manager.status(computer_preferences),
+            "microphone": speech_recognizer.status(),
+        },
         "recent_errors": recent_errors,
     }
 
@@ -332,20 +351,71 @@ def put_preferences(
     return _save_preferences(session, values)
 
 
+@router.put("/computer/settings", response_model=ComputerPreferences)
+def put_computer_settings(
+    values: ComputerPreferences, session: Session = Depends(get_session)
+) -> ComputerPreferences:
+    preferences = _load_preferences(session)
+    preferences.computer = values
+    _save_preferences(session, preferences)
+    event_bus.publish("computer.settings.changed", values.model_dump(mode="json"))
+    return values
+
+
+@router.post("/computer/settings/reset", response_model=ComputerPreferences)
+def reset_computer_settings(
+    session: Session = Depends(get_session),
+) -> ComputerPreferences:
+    preferences = _load_preferences(session)
+    preferences.computer = ComputerPreferences()
+    _save_preferences(session, preferences)
+    event_bus.publish(
+        "computer.settings.changed",
+        preferences.computer.model_dump(mode="json"),
+    )
+    return preferences.computer
+
+
 @router.get("/computer/status")
 def computer_status(session: Session = Depends(get_session)) -> dict:
+    from .computer_models import local_model_manager
+    from .input_bridge import input_bridge
+    from .speech_input import speech_recognizer
+
     preferences = _load_preferences(session).computer
+    bridge_status = input_bridge.status()
+    speech_status = speech_recognizer.status()
+    model_status = local_model_manager.status(preferences)
     initial_tools = sum(tool.initial_release for tool in TOOL_DEFINITIONS)
     initial_controls = sum(control.initial_release for control in CONTROL_ACTIONS)
     return {
         "foundation_version": COMPUTER_FOUNDATION_VERSION,
         "settings": preferences.model_dump(mode="json"),
         "runtimes": {
-            "command": "foundation",
-            "language_model": "not_configured",
-            "speech_recognition": "not_configured",
-            "text_to_speech": "not_configured",
-            "input_bridge": "not_configured",
+            "command": "deterministic_ready",
+            "language_model": (
+                f"{model_status['active_tier']}_running"
+                if model_status["running"]
+                else "enhanced_ready"
+                if model_status["enhanced"]["verified"]
+                else "lite_ready"
+                if model_status["lite"]["verified"]
+                else "optional_component_not_configured"
+            ),
+            "speech_recognition": (
+                "push_to_talk_ready"
+                if speech_status["available"]
+                else "windows_local_unavailable"
+            ),
+            "text_to_speech": "edge_local_ready",
+            "input_bridge": (
+                "emergency_disabled"
+                if bridge_status["emergency_disabled"]
+                else "windows_local_ready"
+                if bridge_status["available"]
+                else "windows_only"
+            ),
+            "bindings": "discovery_available",
         },
         "catalog": {
             "tools": len(TOOL_DEFINITIONS),
@@ -353,12 +423,183 @@ def computer_status(session: Session = Depends(get_session)) -> dict:
             "controls": len(CONTROL_ACTIONS),
             "initial_controls": initial_controls,
         },
-        "execution_available": False,
+        "execution_available": True,
+        "executable_tools": sorted(EXECUTABLE_TOOL_NAMES),
         "warnings": [
-            "Computer tool execution is not enabled in this foundation release.",
-            "Class B game controls remain disabled until a binding-aware Input Bridge is implemented.",
+            (
+                "Lite and Enhanced are optional local components and are not configured."
+                if not model_status["lite"]["verified"]
+                and not model_status["enhanced"]["verified"]
+                else "Local model output remains constrained by the shared policy executor."
+            ),
+            "Wake-word activation is not available; speech input requires push-to-talk.",
+            "Game input remains disabled until Class B and each action are explicitly enabled.",
+            "Generative runtimes receive no live Elite context pending Frontier clarification.",
         ],
     }
+
+
+@router.get("/computer/alerts")
+def get_computer_alerts(
+    include_resolved: bool = False,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    session: Session = Depends(get_session),
+) -> list[dict]:
+    from .computer_alerts import list_alerts
+
+    statuses = (
+        ("active", "acknowledged", "resolved")
+        if include_resolved
+        else ("active",)
+    )
+    return list_alerts(session, limit=limit, statuses=statuses)
+
+
+@router.post("/computer/alerts/{alert_id}/acknowledge")
+def acknowledge_computer_alert(
+    alert_id: str,
+    session: Session = Depends(get_session),
+) -> dict:
+    from .computer_alerts import acknowledge_alert
+
+    try:
+        return acknowledge_alert(session, alert_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
+class ComputerAlertSnoozeInput(BaseModel):
+    category: str = Field(min_length=1, max_length=80)
+    minutes: int = Field(default=30, ge=1, le=1440)
+
+
+@router.post("/computer/alerts/snooze")
+def snooze_computer_alerts(
+    payload: ComputerAlertSnoozeInput,
+    session: Session = Depends(get_session),
+) -> dict:
+    from .computer_alerts import snooze_category
+
+    try:
+        return snooze_category(session, payload.category, payload.minutes)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.get("/computer/models/status")
+def computer_models_status(
+    session: Session = Depends(get_session),
+) -> dict:
+    from .computer_models import local_model_manager
+
+    return local_model_manager.status(_load_preferences(session).computer)
+
+
+@router.post("/computer/models/evaluate")
+def evaluate_computer_model(
+    session: Session = Depends(get_session),
+) -> dict:
+    from .computer_models import local_model_manager
+
+    preferences = _load_preferences(session).computer
+    try:
+        result = local_model_manager.evaluate(preferences)
+        if result.get("model_sha256"):
+            preferences.model_evaluation_score = result["score"]
+            preferences.model_evaluated_sha256 = result["model_sha256"]
+            parent = _load_preferences(session)
+            parent.computer = preferences
+            _save_preferences(session, parent)
+        return result
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.post("/computer/models/stop")
+def stop_computer_model() -> dict:
+    from .computer_models import local_model_manager
+
+    local_model_manager.stop()
+    return {"running": False}
+
+
+@router.get("/computer/privacy")
+def computer_privacy_status(
+    session: Session = Depends(get_session),
+) -> dict:
+    settings = get_settings()
+    model_bytes = sum(
+        path.stat().st_size
+        for path in settings.paths.models.rglob("*")
+        if path.is_file()
+    )
+    return {
+        "profile": str(settings.paths.root),
+        "models_directory": str(settings.paths.models),
+        "model_bytes": model_bytes,
+        "alerts": session.scalar(
+            select(func.count()).select_from(ComputerAlert)
+        )
+        or 0,
+        "invocations": session.scalar(
+            select(func.count()).select_from(ComputerInvocation)
+        )
+        or 0,
+        "local_only": True,
+        "remote_model_access": False,
+        "elite_files_are_read_only": True,
+        "generative_live_elite_context": False,
+    }
+
+
+class ComputerDataDeletionInput(BaseModel):
+    confirmation: str
+    delete_audit: bool = True
+    delete_alerts: bool = True
+    delete_models: bool = False
+    reset_computer_settings: bool = False
+
+
+@router.post("/computer/privacy/delete-local-data")
+def delete_local_computer_data(
+    payload: ComputerDataDeletionInput,
+    session: Session = Depends(get_session),
+) -> dict:
+    if payload.confirmation != "DELETE LOCAL COMPUTER DATA":
+        raise HTTPException(
+            400, "The exact deletion confirmation phrase is required."
+        )
+    deleted = {"audit": 0, "alerts": 0, "models": False, "settings": False}
+    if payload.delete_audit:
+        deleted["audit"] = session.query(ComputerInvocation).delete()
+        session.query(ComputerConfirmation).delete()
+    if payload.delete_alerts:
+        deleted["alerts"] = session.query(ComputerAlert).delete()
+        session.query(ComputerAlertSnooze).delete()
+    if payload.reset_computer_settings:
+        preferences = _load_preferences(session)
+        preferences.computer = ComputerPreferences()
+        _save_preferences(session, preferences)
+        deleted["settings"] = True
+    else:
+        session.commit()
+    if payload.delete_models:
+        import shutil
+
+        from .computer_models import local_model_manager
+
+        local_model_manager.stop()
+        settings = get_settings()
+        model_root = settings.paths.models.resolve()
+        if model_root.parent != settings.paths.root.resolve():
+            raise HTTPException(
+                500, "The model directory failed its safety check."
+            )
+        shutil.rmtree(model_root)
+        model_root.mkdir(parents=True, exist_ok=True)
+        deleted["models"] = True
+    event_bus.publish("computer.local_data.deleted", deleted)
+    return deleted
 
 
 @router.get("/computer/tools")
@@ -375,6 +616,260 @@ def computer_controls(
 ) -> list[dict]:
     controls = control_catalog()
     return [control for control in controls if group is None or control["group"] == group]
+
+
+@router.post("/computer/tools/invoke")
+def invoke_computer_tool(
+    payload: ComputerToolInvocationInput,
+    session: Session = Depends(get_session),
+) -> dict:
+    from .computer_runtime import invoke_tool
+
+    preferences = _load_preferences(session).computer
+    try:
+        source = InvocationSource(payload.source)
+        if source != InvocationSource.EXPLICIT_USER:
+            raise ValueError(
+                "Public tool requests must use explicit_user; manual controls use their dedicated endpoint."
+            )
+        return invoke_tool(
+            payload.tool_name,
+            payload.arguments,
+            source,
+            preferences,
+            timeout_seconds=payload.timeout_seconds,
+        )
+    except (LookupError, ValueError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.post("/computer/controls/execute")
+def execute_manual_computer_control(
+    payload: ComputerManualControlInput,
+    session: Session = Depends(get_session),
+) -> dict:
+    from .computer_runtime import invoke_tool
+
+    action = next(
+        (value for value in CONTROL_ACTIONS if value.action_id == payload.action_id),
+        None,
+    )
+    tool_name = {
+        "ship_system": "set_ship_system",
+        "game_interface": "open_game_interface",
+        "power": "set_power_distribution",
+    }.get(action.group if action else "")
+    if action is None or not action.initial_release or tool_name is None:
+        raise HTTPException(400, "Unknown or prohibited manual control action.")
+    arguments = {"action_id": action.action_id}
+    if payload.desired_state is not None:
+        arguments["desired_state"] = payload.desired_state
+    preferences = _load_preferences(session).computer
+    return invoke_tool(
+        tool_name,
+        arguments,
+        InvocationSource.MANUAL_CONTROL,
+        preferences,
+        timeout_seconds=payload.timeout_seconds,
+    )
+
+
+@router.post("/computer/commands")
+def run_computer_command(
+    payload: ComputerCommandInput,
+    session: Session = Depends(get_session),
+) -> dict:
+    from .computer_commands import execute_command
+
+    preferences = _load_preferences(session).computer
+    return execute_command(
+        payload.text,
+        preferences,
+        session_id=payload.session_id,
+    )
+
+
+class PushToTalkStopInput(BaseModel):
+    session_id: str | None = Field(default=None, max_length=100)
+    execute: bool = True
+
+
+@router.get("/computer/speech-input/status")
+def computer_speech_input_status() -> dict:
+    from .speech_input import speech_recognizer
+
+    return speech_recognizer.status()
+
+
+@router.post("/computer/speech-input/start")
+def start_computer_speech_input(
+    session: Session = Depends(get_session),
+) -> dict:
+    from .speech_input import speech_recognizer
+
+    preferences = _load_preferences(session).computer
+    if (
+        not preferences.enabled
+        or preferences.mode != "command"
+        or preferences.speech_input_mode != "push_to_talk"
+    ):
+        raise HTTPException(
+            409,
+            "Enable Command mode and push-to-talk before starting speech input.",
+        )
+    try:
+        return speech_recognizer.start()
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.post("/computer/speech-input/stop")
+def stop_computer_speech_input(
+    payload: PushToTalkStopInput,
+    session: Session = Depends(get_session),
+) -> dict:
+    from .computer_commands import execute_command
+    from .speech_input import speech_recognizer
+
+    preferences = _load_preferences(session).computer
+    try:
+        recognition = speech_recognizer.stop()
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    text = recognition["text"]
+    confidence = recognition["confidence"]
+    accepted = bool(
+        text and confidence >= preferences.speech_confidence_threshold
+    )
+    command = None
+    if accepted and payload.execute:
+        command = execute_command(
+            text,
+            preferences,
+            session_id=payload.session_id,
+        )
+    return {
+        **recognition,
+        "accepted": accepted,
+        "threshold": preferences.speech_confidence_threshold,
+        "command": command,
+        "reason": (
+            None
+            if accepted
+            else "No speech was recognized."
+            if not text
+            else "Recognition confidence was below the configured action threshold."
+        ),
+    }
+
+
+@router.get("/computer/input-bridge")
+def computer_input_bridge_status() -> dict:
+    from .input_bridge import input_bridge
+
+    return input_bridge.status()
+
+
+@router.post("/computer/input-bridge/emergency-disable")
+def emergency_disable_computer_input_bridge() -> dict:
+    from .input_bridge import input_bridge
+
+    return input_bridge.emergency_disable()
+
+
+@router.post("/computer/input-bridge/reset")
+def reset_computer_input_bridge() -> dict:
+    from .input_bridge import input_bridge
+
+    return input_bridge.reset_emergency()
+
+
+class ComputerConfirmationInput(BaseModel):
+    approve: bool
+    timeout_seconds: float = Field(default=5, ge=0.1, le=30)
+
+
+@router.post("/computer/confirmations/{confirmation_id}")
+def resolve_computer_confirmation(
+    confirmation_id: str,
+    payload: ComputerConfirmationInput,
+    session: Session = Depends(get_session),
+) -> dict:
+    from .computer_runtime import resolve_confirmation
+
+    preferences = _load_preferences(session).computer
+    try:
+        return resolve_confirmation(
+            confirmation_id,
+            preferences,
+            approve=payload.approve,
+            timeout_seconds=payload.timeout_seconds,
+        )
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.get("/computer/invocations")
+def get_computer_invocations(
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> list[dict]:
+    from .computer_runtime import recent_invocations
+
+    return recent_invocations(limit)
+
+
+@router.post("/computer/invocations/{invocation_id}/cancel")
+def cancel_computer_invocation(invocation_id: str) -> dict:
+    from .computer_runtime import cancel_invocation
+
+    try:
+        return cancel_invocation(invocation_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.get("/computer/bindings")
+def get_computer_bindings(session: Session = Depends(get_session)) -> dict:
+    from .elite_bindings import binding_report, default_bindings_directory
+    from .input_bridge import input_bridge, keyboard_binding_supported
+
+    configured = _load_preferences(session).computer.bindings_directory.strip()
+    directory = (
+        Path(configured).expanduser().resolve()
+        if configured
+        else default_bindings_directory()
+    )
+    report = binding_report(directory)
+    bridge_available = input_bridge.status()["available"]
+    for capability in report["capabilities"]:
+        has_keyboard = any(
+            slot and slot.get("device_kind") == "keyboard"
+            for slot in (capability.get("secondary"), capability.get("primary"))
+        )
+        keyboard_ready = any(
+            slot
+            and slot.get("device_kind") == "keyboard"
+            and keyboard_binding_supported(slot)
+            for slot in (capability.get("secondary"), capability.get("primary"))
+        )
+        capability["input_bridge_available"] = bridge_available and keyboard_ready
+        capability["ion_status"] = (
+            "conflict"
+            if capability["status"] == "conflict"
+            else "ready"
+            if keyboard_ready
+            else "unsupported_keyboard_binding"
+            if has_keyboard
+            else "requires_keyboard_binding"
+            if capability["status"] != "unbound"
+            else "unbound"
+        )
+    report["input_bridge_available"] = bridge_available
+    return report
 
 
 @router.get("/operations/active", response_model=ActiveOperationOutput | None)

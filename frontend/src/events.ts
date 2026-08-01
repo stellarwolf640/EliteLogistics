@@ -75,5 +75,33 @@ export function connectQueryEvents(queryClient: QueryClient) {
     if (event.type === "update.progressed") {
       void queryClient.invalidateQueries({ queryKey: ["update-status"] });
     }
+    if (event.type.startsWith("computer.")) {
+      void queryClient.invalidateQueries({ queryKey: ["computer-status"] });
+      void queryClient.invalidateQueries({ queryKey: ["computer-invocations"] });
+    }
+    if (event.type.startsWith("computer.alert.")) {
+      void queryClient.invalidateQueries({ queryKey: ["computer-alerts"] });
+    }
+    if (
+      event.type.startsWith("computer.model.")
+      || event.type === "computer.local_data.deleted"
+    ) {
+      void queryClient.invalidateQueries({ queryKey: ["computer-models"] });
+      void queryClient.invalidateQueries({ queryKey: ["computer-privacy"] });
+    }
+    if (
+      event.type.startsWith("computer.control.")
+      || event.type.startsWith("computer.input_bridge.")
+    ) {
+      void queryClient.invalidateQueries({ queryKey: ["computer-input-bridge"] });
+    }
+    if (event.type === "computer.bindings.changed") {
+      void queryClient.invalidateQueries({ queryKey: ["computer-bindings"] });
+    }
+    if (event.type === "computer.interface.requested") {
+      window.dispatchEvent(
+        new CustomEvent("ion:computer-interface", { detail: event.payload }),
+      );
+    }
   });
 }

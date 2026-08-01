@@ -2,11 +2,12 @@
 
 ## Status
 
-ION Computer is a planned operational copilot. The current code provides only
-its typed preferences, tool/control catalogues, permission policy, read-only
-catalogue APIs, and authorization tests. It does **not** yet include a language
-model, speech recognition, text-to-speech, wake word, raw input bridge, or tool
-execution.
+ION Computer is an operational copilot under active development. C0–C5 now
+provides typed preferences, catalogues, policy, audited tool execution,
+read-only binding discovery, a Windows-local allowlisted Input Bridge, manual
+controls, and deterministic typed Command Mode. It does **not** include a
+language model, speech recognition, text-to-speech, wake word, arbitrary input,
+or multi-step game automation.
 
 The backend source of truth is:
 
@@ -163,11 +164,16 @@ The future Input Bridge must enforce:
 GET /api/computer/status
 GET /api/computer/tools
 GET /api/computer/controls
+POST /api/computer/commands
+POST /api/computer/controls/execute
+GET /api/computer/input-bridge
+POST /api/computer/input-bridge/emergency-disable
+POST /api/computer/input-bridge/reset
 ```
 
-These endpoints are deliberately read-only. The status endpoint reports that
-execution is unavailable until explicit runtime and Input Bridge work is
-implemented.
+The catalogue endpoints are read-only. Tool, command, confirmation, binding,
+and Input Bridge status/emergency endpoints support C1–C5 execution through
+the shared policy runtime.
 
 Preferences schema 3 includes a nested `computer` record with:
 

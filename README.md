@@ -9,6 +9,23 @@ ION 0.2.3 includes one-way trades, round trips, immersion-oriented
 multi-stop Trade Routes, profitable transit, full-screen flight manifests,
 ship profiles, and ship optimization planning.
 
+The unreleased Computer C0–C12 foundation adds an in-universe policy console, audited
+Read/ION tools, read-only Elite binding discovery, a Windows-local one-shot
+Input Bridge, a manual HOTAS-friendly control deck, and deterministic typed
+commands. It also adds planner/operation tools, optional installed-Edge speech
+output, activation-gated local Windows push-to-talk, and deterministic
+operational alerts with cooldown, snooze, acknowledgement, and critical-only
+interruption.
+
+Lite and Enhanced are optional, independently removable, checksum-verified
+local llama.cpp components; no model is bundled. Their output can only select a
+restricted subset of the existing audited tools, must pass the local evaluation
+threshold, and falls back to deterministic Command Mode on any failure. Local
+models cannot use game-control or preference tools and currently receive no
+live Elite telemetry pending written clarification from Frontier. ION does not
+run a wake-word listener, edit binding files, accept arbitrary keys, or automate
+multi-step gameplay.
+
 The interface follows an Elite-style service hierarchy: begin at the home console, enter Trade Operations, Navigation, Fleet Management, or the Data Network, then select the individual planning service. Ship optimization includes complete core, optional, utility, and hardpoint recommendations for Cargo, Range, Safety, and Balanced roles.
 
 The optional Elite game link reads the local journal, status, cargo, market, and

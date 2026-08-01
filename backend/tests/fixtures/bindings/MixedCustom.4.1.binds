@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Root PresetName="Mixed Custom" MajorVersion="4" MinorVersion="1">
+  <LandingGearToggle>
+    <Primary Device="Keyboard" Key="Key_L">
+      <Modifier Device="Keyboard" Key="Key_LeftControl" />
+    </Primary>
+    <Secondary Device="{T.16000M}" Key="Joy_14" />
+  </LandingGearToggle>
+  <ToggleCargoScoop>
+    <Primary Device="{T.16000M}" Key="Joy_13" />
+    <Secondary Device="{No Device}" Key="" />
+  </ToggleCargoScoop>
+  <ShipSpotLightToggle>
+    <Primary Device="Keyboard" Key="Key_Insert" />
+    <Secondary Device="{No Device}" Key="" />
+  </ShipSpotLightToggle>
+  <GalaxyMapOpen>
+    <Primary Device="Mouse" Key="Mouse_3" />
+    <Secondary Device="{No Device}" Key="" />
+  </GalaxyMapOpen>
+  <ResetPowerDistribution>
+    <Primary Device="GamePad" Key="Pad_DPadDown" />
+    <Secondary Device="{No Device}" Key="" />
+  </ResetPowerDistribution>
+</Root>

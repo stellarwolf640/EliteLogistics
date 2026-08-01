@@ -19,6 +19,7 @@ class RuntimePaths:
     logs: Path
     updates: Path
     webview: Path
+    models: Path
 
     def create(self) -> "RuntimePaths":
         for path in (
@@ -28,6 +29,7 @@ class RuntimePaths:
             self.logs,
             self.updates,
             self.webview,
+            self.models,
         ):
             path.mkdir(parents=True, exist_ok=True)
         return self
@@ -79,6 +81,7 @@ def get_settings() -> Settings:
         logs=data_dir / "logs",
         updates=data_dir / "updates",
         webview=data_dir / "webview",
+        models=data_dir / "models",
     ).create()
     database_url = os.getenv(
         "ELITE_LOGISTICS_DATABASE_URL",

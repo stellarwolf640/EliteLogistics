@@ -55,6 +55,8 @@ Remaining before completion:
 
 ## C1 — Computer settings and policy interface
 
+**Status: implemented**
+
 Build user-facing configuration without executing tools.
 
 ### Features
@@ -93,6 +95,8 @@ Build user-facing configuration without executing tools.
 - The UI clearly says execution is not installed.
 
 ## C2 — Safe tool-execution runtime
+
+**Status: implemented**
 
 Implement orchestration using only Read and ION tools.
 
@@ -151,6 +155,8 @@ A model or command parser never calls application functions directly.
 
 ## C3 — Elite binding discovery
 
+**Status: implemented**
+
 Understand available bindings before attempting control.
 
 ### Features
@@ -206,6 +212,8 @@ proven.
 - Discovery never sends an input.
 
 ## C4 — Local Input Bridge and manual control panel
+
+**Status: implemented**
 
 Prove Class B control safety without language interpretation.
 
@@ -274,6 +282,8 @@ For supported stateful controls:
 
 ## C5 — Deterministic Computer Command Mode
 
+**Status: implemented**
+
 Add the first functional Computer without a language model.
 
 ### Initial input methods
@@ -323,7 +333,7 @@ Example:
 - Command Mode performs well on low-end hardware.
 - The same tools remain usable by future AI modes.
 
-## C6 — Voice output
+## C6 — Voice output (implemented on the Computer branch)
 
 Add speech before speech recognition.
 
@@ -346,7 +356,7 @@ Add speech before speech recognition.
 - Repeated events do not create an announcement backlog.
 - Command Mode can use voice output without AI.
 
-## C7 — Speech recognition and wake word
+## C7 — Speech recognition and wake word (C7a push-to-talk implemented)
 
 Add voice commands only after manual and typed controls are stable.
 
@@ -357,6 +367,10 @@ Add voice commands only after manual and typed controls are stable.
 - Voice disabled.
 
 Push-to-talk is the safest default.
+
+Current branch status: local Windows push-to-talk is implemented against the
+Windows default input. Wake word and selectable input-device support remain
+separately gated C7b work and are not exposed as available modes.
 
 ### Voice pipeline
 
@@ -391,7 +405,7 @@ Policy and confirmation
 - Audio processing remains local by default.
 - Microphone failures degrade to text mode.
 
-## C8 — Planning and operation tool completion
+## C8 — Planning and operation tool completion (implemented on the Computer branch)
 
 Connect the remaining ION features.
 
@@ -438,6 +452,10 @@ Confirmation is required for:
 
 ## C9 — Proactive operational assistant
 
+**Implementation status:** Technical foundation implemented. Alert generation
+is deterministic and persisted; UI acknowledgement, snooze, disable preferences,
+and critical speech interruption use the same records.
+
 Build a deterministic alert engine before generative proactive behavior.
 
 ### Candidate alerts
@@ -478,6 +496,10 @@ A language layer may phrase an alert but cannot raise its severity.
 
 ## C10 — Computer Lite
 
+**Implementation status:** Optional-provider foundation implemented. ION can
+verify and run a separately supplied Lite GGUF model through a configured local
+llama.cpp server. No model binary is bundled or downloaded by ION.
+
 Add the first optional local language model.
 
 ### Responsibilities
@@ -516,6 +538,11 @@ Add the first optional local language model.
 
 ## C11 — Computer Enhanced
 
+**Implementation status:** Optional-provider foundation implemented. Enhanced
+uses the same restricted tools and policy executor as Lite, with configurable
+resource limits, hardware-aware Automatic selection, checksum-bound evaluation,
+and Lite/Command fallback.
+
 Add an optional larger local model.
 
 ### Improvements
@@ -544,6 +571,11 @@ Enhanced receives the same permissions and tools as Lite.
 - Model updates are independently versioned and verified.
 
 ## C12 — Public-release hardening
+
+**Implementation status:** Core technical safeguards are implemented and tested.
+Installer UX for selecting/downloading model components, broader accessibility
+and upgrade qualification, future remote-device review, and the external
+Frontier policy clarification remain release work rather than completed claims.
 
 ### Technical work
 
@@ -576,12 +608,12 @@ https://www.frontier.co.uk/legal/eula
 
 ## Recommended delivery order
 
-1. Merge PR #3.
-2. Build C1 settings.
-3. Build C2 safe ION tool execution.
-4. Build C3 binding discovery.
-5. Build C4 manual Input Bridge.
-6. Build C5 deterministic text Computer.
+1. Merge PR #3. **Complete**
+2. Build C1 settings. **Complete**
+3. Build C2 safe ION tool execution. **Complete**
+4. Build C3 binding discovery. **Complete**
+5. Build C4 manual Input Bridge. **Complete**
+6. Build C5 deterministic text Computer. **Complete**
 7. Add C6 voice output.
 8. Add C7 speech input.
 9. Complete planning tools in C8.

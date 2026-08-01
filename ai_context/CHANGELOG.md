@@ -18,6 +18,85 @@ This changelog records product and architectural changes that future agents need
 - Added the canonical `COMPUTER_DESIGN.md` and authorization regression tests.
 - Added `COMPUTER_ROADMAP.md` with the C0–C12 implementation sequence,
   dependencies, safety gates, and acceptance criteria.
+- Merged foundation PR #3 into `main`.
+- Implemented the C1 Computer service with Off/Command/runtime mode visibility,
+  verbosity, commander address, proactivity, confirmation policy, Class B
+  master and per-action permissions, safe-default reset, tool catalogue, and
+  explicit unavailable-runtime explanations.
+- Implemented C2's single policy-gated Read/ION tool executor with structured
+  arguments/results, two-minute immutable confirmations, integrity checks,
+  timeouts, cancellation, local SQLite invocation auditing, and typed Computer
+  events over the existing WebSocket.
+- Added executable awareness tools for operational, ship, navigation, cargo,
+  current-system, active-operation, next-instruction, and control-capability
+  state.
+- Added safe interface tools for navigation, the route console, planner/filter
+  population, information cards, and diagnostics. All interface payloads are
+  allowlisted; no arbitrary script or input execution exists.
+- Implemented C3 read-only Elite `.binds` discovery with active-preset
+  selection, primary/secondary binding parsing, keyboard/mouse/HOTAS/controller
+  classification, conflict and unbound reporting, sanitized fixtures, and a
+  background change monitor.
+- Added the `/computer` in-universe service console for policy, safe tool
+  testing, binding readiness, Class B permissions, and local audit visibility.
+- Implemented C4's Windows-local Input Bridge with fixed semantic action IDs,
+  discovered keyboard bindings, Elite foreground checks, one-command
+  serialization, rate limits, desired-state checks against `Status.json`,
+  telemetry verification, no automatic retries, an emergency hotkey, events,
+  and local audit records.
+- Added the manual Class B control deck. It works independently of Computer
+  mode but still requires the Class B master switch and per-action opt-in.
+- Implemented C5 deterministic typed Command Mode with explicit synonyms,
+  numeric/filter extraction, ambiguity clarification, lightweight follow-up
+  context, response templates, suggested commands, and Ctrl+Space focus.
+- Added commands for briefings, location, next instruction, route console,
+  round-trip planner preparation, planning filters, ship-system desired states,
+  cockpit interfaces, and bounded power inputs.
+- Binding discovery remains read-only. The Input Bridge uses only an existing
+  conflict-free keyboard binding and never accepts arbitrary key input.
+- Stabilized side-effect execution so its timeout applies only before an
+  execution slot is acquired. Once a one-shot ION or game action starts, ION
+  waits for its definitive result instead of reporting a timeout while the
+  action can still complete.
+- Implemented C8 planner tools on the production route engine for one-way
+  trades, round trips, Trade Routes, Profitable Transit, current-cargo sales,
+  commodity sourcing, comparisons, reachability, and replanning. Structured
+  requests retain reserve, pad, permit, station-access, freshness, and
+  confidence filters.
+- Implemented C8 operation activation, progress, reverse/skip, pause/resume,
+  replacement, completion, and cancellation against the persisted singleton
+  active operation. Activation, replacement, and cancellation retain immutable
+  commander confirmation.
+- Implemented C6 voice output with installed offline Edge/Windows voices,
+  selectable voice, rate, volume, queued delivery, duplicate suppression,
+  critical interruption hooks, critical-state ordinary-speech suppression,
+  dismissal, and visible-text fallback.
+- Implemented C7a activation-gated Windows-local push-to-talk using
+  `System.Speech`. Recognition text and confidence are returned to the UI;
+  requests below the configurable action threshold never enter the command
+  executor. Wake word remains unavailable and cannot listen in the background.
+- Added Computer UI controls for speech output, voice testing/dismissal,
+  push-to-talk, microphone/listening visibility, and the confidence threshold.
+- Implemented C9's persisted deterministic alert engine with structured facts,
+  stable fingerprints, category cooldowns, acknowledgement, noncritical
+  snoozing/disabling, automatic resolution, and critical-only interruption.
+- Added optional C10/C11 llama.cpp-compatible Lite and Enhanced providers.
+  Manifests and model files are checksum-verified, models remain independently
+  removable, Automatic mode uses available RAM, and Enhanced falls back to Lite
+  when unavailable or above the configured memory limit.
+- Added a fixed model tool allowlist that excludes game-control and preference
+  tools. Model output never supplies tool results and every selected tool still
+  crosses the existing authorization and audit boundary.
+- Added model evaluation gating bound to the selected model checksum. Any
+  missing, corrupt, failed, or unevaluated runtime falls back to deterministic
+  Command Mode.
+- Added C12 recovery and privacy foundations: interrupted invocations fail
+  without retry after restart, model/microphone diagnostics, input latency
+  telemetry, local model shutdown, privacy inventory, and exact-phrase deletion
+  of audit/alert data and optional model files.
+- Generative runtimes deliberately receive no live Elite context. Public
+  generative use of that data remains blocked on written Frontier clarification;
+  no unattended automation or multi-step game execution was introduced.
 
 ## 0.2.3 — 2026-07-29
 
