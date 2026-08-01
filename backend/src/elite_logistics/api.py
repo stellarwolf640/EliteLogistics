@@ -23,6 +23,10 @@ from .computer import (
 )
 from .database import (
     ActiveOperation,
+    ComputerAlert,
+    ComputerAlertSnooze,
+    ComputerConfirmation,
+    ComputerInvocation,
     DataImport,
     Job,
     MarketObservation,
@@ -113,7 +117,11 @@ def health() -> dict:
 
 @router.get("/diagnostics")
 def diagnostics(session: Session = Depends(get_session)) -> dict:
+    from .computer_models import local_model_manager
+    from .speech_input import speech_recognizer
+
     settings = get_settings()
+    computer_preferences = _load_preferences(session).computer
     database_ok = True
     try:
         session.execute(select(1))
@@ -141,6 +149,7 @@ def diagnostics(session: Session = Depends(get_session)) -> dict:
             "logs": str(settings.paths.logs),
             "updates": str(settings.paths.updates),
             "webview": str(settings.paths.webview),
+            "models": str(settings.paths.models),
         },
         "database_ok": database_ok,
         "webview2_available": (
@@ -149,6 +158,10 @@ def diagnostics(session: Session = Depends(get_session)) -> dict:
             else None
         ),
         "game_link": elite_status(session),
+        "computer": {
+            "models": local_model_manager.status(computer_preferences),
+            "microphone": speech_recognizer.status(),
+        },
         "recent_errors": recent_errors,
     }
 
@@ -365,12 +378,14 @@ def reset_computer_settings(
 
 @router.get("/computer/status")
 def computer_status(session: Session = Depends(get_session)) -> dict:
+    from .computer_models import local_model_manager
     from .input_bridge import input_bridge
     from .speech_input import speech_recognizer
 
     preferences = _load_preferences(session).computer
     bridge_status = input_bridge.status()
     speech_status = speech_recognizer.status()
+    model_status = local_model_manager.status(preferences)
     initial_tools = sum(tool.initial_release for tool in TOOL_DEFINITIONS)
     initial_controls = sum(control.initial_release for control in CONTROL_ACTIONS)
     return {
@@ -378,7 +393,15 @@ def computer_status(session: Session = Depends(get_session)) -> dict:
         "settings": preferences.model_dump(mode="json"),
         "runtimes": {
             "command": "deterministic_ready",
-            "language_model": "not_configured",
+            "language_model": (
+                f"{model_status['active_tier']}_running"
+                if model_status["running"]
+                else "enhanced_ready"
+                if model_status["enhanced"]["verified"]
+                else "lite_ready"
+                if model_status["lite"]["verified"]
+                else "optional_component_not_configured"
+            ),
             "speech_recognition": (
                 "push_to_talk_ready"
                 if speech_status["available"]
@@ -403,11 +426,180 @@ def computer_status(session: Session = Depends(get_session)) -> dict:
         "execution_available": True,
         "executable_tools": sorted(EXECUTABLE_TOOL_NAMES),
         "warnings": [
-            "Lite and Enhanced language-model runtimes are not installed.",
+            (
+                "Lite and Enhanced are optional local components and are not configured."
+                if not model_status["lite"]["verified"]
+                and not model_status["enhanced"]["verified"]
+                else "Local model output remains constrained by the shared policy executor."
+            ),
             "Wake-word activation is not available; speech input requires push-to-talk.",
             "Game input remains disabled until Class B and each action are explicitly enabled.",
+            "Generative runtimes receive no live Elite context pending Frontier clarification.",
         ],
     }
+
+
+@router.get("/computer/alerts")
+def get_computer_alerts(
+    include_resolved: bool = False,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    session: Session = Depends(get_session),
+) -> list[dict]:
+    from .computer_alerts import list_alerts
+
+    statuses = (
+        ("active", "acknowledged", "resolved")
+        if include_resolved
+        else ("active",)
+    )
+    return list_alerts(session, limit=limit, statuses=statuses)
+
+
+@router.post("/computer/alerts/{alert_id}/acknowledge")
+def acknowledge_computer_alert(
+    alert_id: str,
+    session: Session = Depends(get_session),
+) -> dict:
+    from .computer_alerts import acknowledge_alert
+
+    try:
+        return acknowledge_alert(session, alert_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
+class ComputerAlertSnoozeInput(BaseModel):
+    category: str = Field(min_length=1, max_length=80)
+    minutes: int = Field(default=30, ge=1, le=1440)
+
+
+@router.post("/computer/alerts/snooze")
+def snooze_computer_alerts(
+    payload: ComputerAlertSnoozeInput,
+    session: Session = Depends(get_session),
+) -> dict:
+    from .computer_alerts import snooze_category
+
+    try:
+        return snooze_category(session, payload.category, payload.minutes)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.get("/computer/models/status")
+def computer_models_status(
+    session: Session = Depends(get_session),
+) -> dict:
+    from .computer_models import local_model_manager
+
+    return local_model_manager.status(_load_preferences(session).computer)
+
+
+@router.post("/computer/models/evaluate")
+def evaluate_computer_model(
+    session: Session = Depends(get_session),
+) -> dict:
+    from .computer_models import local_model_manager
+
+    preferences = _load_preferences(session).computer
+    try:
+        result = local_model_manager.evaluate(preferences)
+        if result.get("model_sha256"):
+            preferences.model_evaluation_score = result["score"]
+            preferences.model_evaluated_sha256 = result["model_sha256"]
+            parent = _load_preferences(session)
+            parent.computer = preferences
+            _save_preferences(session, parent)
+        return result
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.post("/computer/models/stop")
+def stop_computer_model() -> dict:
+    from .computer_models import local_model_manager
+
+    local_model_manager.stop()
+    return {"running": False}
+
+
+@router.get("/computer/privacy")
+def computer_privacy_status(
+    session: Session = Depends(get_session),
+) -> dict:
+    settings = get_settings()
+    model_bytes = sum(
+        path.stat().st_size
+        for path in settings.paths.models.rglob("*")
+        if path.is_file()
+    )
+    return {
+        "profile": str(settings.paths.root),
+        "models_directory": str(settings.paths.models),
+        "model_bytes": model_bytes,
+        "alerts": session.scalar(
+            select(func.count()).select_from(ComputerAlert)
+        )
+        or 0,
+        "invocations": session.scalar(
+            select(func.count()).select_from(ComputerInvocation)
+        )
+        or 0,
+        "local_only": True,
+        "remote_model_access": False,
+        "elite_files_are_read_only": True,
+        "generative_live_elite_context": False,
+    }
+
+
+class ComputerDataDeletionInput(BaseModel):
+    confirmation: str
+    delete_audit: bool = True
+    delete_alerts: bool = True
+    delete_models: bool = False
+    reset_computer_settings: bool = False
+
+
+@router.post("/computer/privacy/delete-local-data")
+def delete_local_computer_data(
+    payload: ComputerDataDeletionInput,
+    session: Session = Depends(get_session),
+) -> dict:
+    if payload.confirmation != "DELETE LOCAL COMPUTER DATA":
+        raise HTTPException(
+            400, "The exact deletion confirmation phrase is required."
+        )
+    deleted = {"audit": 0, "alerts": 0, "models": False, "settings": False}
+    if payload.delete_audit:
+        deleted["audit"] = session.query(ComputerInvocation).delete()
+        session.query(ComputerConfirmation).delete()
+    if payload.delete_alerts:
+        deleted["alerts"] = session.query(ComputerAlert).delete()
+        session.query(ComputerAlertSnooze).delete()
+    if payload.reset_computer_settings:
+        preferences = _load_preferences(session)
+        preferences.computer = ComputerPreferences()
+        _save_preferences(session, preferences)
+        deleted["settings"] = True
+    else:
+        session.commit()
+    if payload.delete_models:
+        import shutil
+
+        from .computer_models import local_model_manager
+
+        local_model_manager.stop()
+        settings = get_settings()
+        model_root = settings.paths.models.resolve()
+        if model_root.parent != settings.paths.root.resolve():
+            raise HTTPException(
+                500, "The model directory failed its safety check."
+            )
+        shutil.rmtree(model_root)
+        model_root.mkdir(parents=True, exist_ok=True)
+        deleted["models"] = True
+    event_bus.publish("computer.local_data.deleted", deleted)
+    return deleted
 
 
 @router.get("/computer/tools")

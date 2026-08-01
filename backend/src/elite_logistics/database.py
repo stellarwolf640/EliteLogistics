@@ -199,6 +199,33 @@ class ComputerConfirmation(Base):
     )
 
 
+class ComputerAlert(Base):
+    __tablename__ = "computer_alerts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), index=True)
+    category: Mapped[str] = mapped_column(String(80), index=True)
+    severity: Mapped[str] = mapped_column(String(20), index=True)
+    title: Mapped[str] = mapped_column(String(160))
+    message: Mapped[str] = mapped_column(Text)
+    facts: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(30), index=True, default="active")
+    interrupt_allowed: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    acknowledged_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class ComputerAlertSnooze(Base):
+    __tablename__ = "computer_alert_snoozes"
+
+    category: Mapped[str] = mapped_column(String(80), primary_key=True)
+    snoozed_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 settings = get_settings()
 connect_args = (
     {"check_same_thread": False, "timeout": 60}
@@ -246,6 +273,7 @@ def init_database() -> None:
     command.upgrade(config, "head")
     with Session(engine) as session:
         recover_interrupted_jobs(session)
+        recover_interrupted_computer(session)
 
 
 def recover_interrupted_jobs(session: Session) -> int:
@@ -258,6 +286,25 @@ def recover_interrupted_jobs(session: Session) -> int:
             status="failed",
             error="Interrupted when ION last stopped. Start the operation again.",
             updated_at=now,
+        )
+    )
+    session.commit()
+    return int(result.rowcount or 0)
+
+
+def recover_interrupted_computer(session: Session) -> int:
+    """A queued/running one-shot invocation cannot survive process shutdown."""
+    now = datetime.now(UTC)
+    result = session.execute(
+        update(ComputerInvocation)
+        .where(ComputerInvocation.status.in_(("queued", "running")))
+        .values(
+            status="failed",
+            error=(
+                "Interrupted when ION last stopped. The action was not retried; "
+                "review telemetry before issuing it again."
+            ),
+            completed_at=now,
         )
     )
     session.commit()

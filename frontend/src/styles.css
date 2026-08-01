@@ -389,6 +389,31 @@ main { min-width: 0; }
 .voice-settings select, .voice-settings input[type="range"], .speech-input-settings select, .speech-input-settings input[type="range"] { width: 100%; }
 .voice-actions { display: flex; gap: .4rem; grid-column: 1 / -1; }
 .voice-actions button { margin: 0; }
+.computer-alerts { display: grid; gap: .55rem; }
+.computer-alerts article { display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: center; padding: .85rem; border: 1px solid var(--line); border-left: 3px solid var(--amber); background: #050606; }
+.computer-alerts article.critical { border-color: #7a2721; border-left-color: var(--red); background: linear-gradient(90deg, #220704, #050606 35%); }
+.computer-alerts article.warning { border-left-color: #ffb000; }
+.computer-alerts article > div > span, .model-status-grid span, .privacy-stats span { color: var(--amber); font: 600 .56rem "Barlow Condensed"; letter-spacing: .11em; text-transform: uppercase; }
+.computer-alerts h3 { margin: .15rem 0; text-transform: uppercase; }
+.computer-alerts p { margin: 0; color: var(--text); }
+.computer-alerts small { display: block; margin-top: .35rem; color: var(--muted); }
+.alert-actions, .model-actions { display: flex; gap: .45rem; flex-wrap: wrap; }
+.alert-actions button, .model-actions button { margin: 0; }
+.alert-preferences { margin-top: .8rem; border: 1px solid var(--line); padding: .7rem; background: #050606; }
+.alert-preferences summary { cursor: pointer; color: var(--amber); font: 700 .64rem "Barlow Condensed"; letter-spacing: .1em; text-transform: uppercase; }
+.alert-preferences > div { display: grid; grid-template-columns: repeat(3, 1fr); gap: .55rem; margin-top: .7rem; }
+.model-paths { display: grid; grid-template-columns: 1.1fr 1fr 1fr auto; gap: .7rem; align-items: end; margin-top: 1rem; }
+.model-paths input, .model-limits input { width: 100%; }
+.model-limits { display: grid; grid-template-columns: repeat(3, 1fr); gap: .7rem; margin-top: .7rem; }
+.model-status-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: .55rem; margin: 1rem 0; }
+.model-status-grid article, .privacy-stats article { display: grid; gap: .25rem; padding: .75rem; border: 1px solid var(--line); background: #050606; }
+.model-status-grid strong { color: var(--amber-hi); font: 700 .78rem "Barlow Condensed"; text-transform: uppercase; overflow-wrap: anywhere; }
+.model-status-grid small { color: var(--muted); }
+.privacy-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: .55rem; margin: 1rem 0; }
+.privacy-stats strong { color: var(--amber-hi); font: 700 1.15rem "Barlow Condensed"; }
+.deletion-control { display: grid; grid-template-columns: 1fr auto auto; gap: .75rem; align-items: end; padding: .85rem; border: 1px solid #7a2721; background: #110504; }
+.deletion-control input { width: 100%; }
+.deletion-control button { margin: 0; }
 .push-to-talk { min-width: 142px; border: 1px solid var(--line-hi); border-left: 3px solid var(--amber); background: #080706; color: var(--amber-hi); font: 700 .62rem "Barlow Condensed"; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
 .push-to-talk.listening { border-color: var(--red); border-left-color: var(--red); background: #210706; color: #ffd5cf; box-shadow: 0 0 18px #ff443344; }
 .push-to-talk:disabled { opacity: .4; cursor: not-allowed; }
@@ -447,7 +472,7 @@ main { min-width: 0; }
   .manifest-leg { grid-template-columns: 35px 1fr 1fr; }
   .manifest-profit { grid-column: 3; }
   .flight-board-body { grid-template-columns: 220px minmax(0, 1fr); }
-  .computer-settings-grid, .runtime-strip, .voice-settings { grid-template-columns: 1fr 1fr; }
+  .computer-settings-grid, .runtime-strip, .voice-settings, .model-status-grid, .model-paths { grid-template-columns: 1fr 1fr; }
   .manual-control-deck { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 760px) {
@@ -483,7 +508,7 @@ main { min-width: 0; }
   .binding-readout { grid-column: 2; text-align: left; }
   .class-b-master { grid-template-columns: 1fr; }
   .bindings-panel .path-picker { grid-template-columns: 1fr; }
-  .command-entry, .speech-input-settings, .voice-settings { grid-template-columns: 1fr; }
+  .command-entry, .speech-input-settings, .voice-settings, .computer-alerts article, .alert-preferences > div, .model-paths, .model-limits, .model-status-grid, .privacy-stats, .deletion-control { grid-template-columns: 1fr; }
   .voice-actions { grid-column: 1; }
 }
 @media (max-width: 520px) {

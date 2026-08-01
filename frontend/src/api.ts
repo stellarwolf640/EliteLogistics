@@ -22,6 +22,9 @@ import type {
   SpeechInputStatus,
   SpeechRecognitionResult,
   BindingReport,
+  ComputerAlert,
+  ComputerModelStatus,
+  ComputerPrivacyStatus,
 } from "./types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -65,6 +68,33 @@ export const api = {
     request<ComputerPreferences>("/api/computer/settings/reset", { method: "POST" }),
   computerBindings: () => request<BindingReport>("/api/computer/bindings"),
   computerInvocations: () => request<ComputerInvocation[]>("/api/computer/invocations?limit=30"),
+  computerAlerts: () => request<ComputerAlert[]>("/api/computer/alerts"),
+  acknowledgeComputerAlert: (alertId: string) =>
+    request<ComputerAlert>(`/api/computer/alerts/${alertId}/acknowledge`, { method: "POST" }),
+  snoozeComputerAlerts: (category: string, minutes = 30) =>
+    request<{ category: string; until: string }>("/api/computer/alerts/snooze", {
+      method: "POST",
+      body: JSON.stringify({ category, minutes }),
+    }),
+  computerModelsStatus: () =>
+    request<ComputerModelStatus>("/api/computer/models/status"),
+  evaluateComputerModel: () =>
+    request<{ score: number; passed: boolean; threshold: number; model_sha256: string }>("/api/computer/models/evaluate", { method: "POST" }),
+  stopComputerModel: () =>
+    request<{ running: boolean }>("/api/computer/models/stop", { method: "POST" }),
+  computerPrivacy: () =>
+    request<ComputerPrivacyStatus>("/api/computer/privacy"),
+  deleteComputerData: (payload: {
+    confirmation: string;
+    delete_audit: boolean;
+    delete_alerts: boolean;
+    delete_models: boolean;
+    reset_computer_settings: boolean;
+  }) =>
+    request<Record<string, unknown>>("/api/computer/privacy/delete-local-data", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   invokeComputerTool: (tool_name: string, args: Record<string, unknown> = {}) =>
     request<ComputerInvocation>("/api/computer/tools/invoke", {
       method: "POST",

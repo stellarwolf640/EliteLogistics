@@ -452,6 +452,10 @@ Confirmation is required for:
 
 ## C9 — Proactive operational assistant
 
+**Implementation status:** Technical foundation implemented. Alert generation
+is deterministic and persisted; UI acknowledgement, snooze, disable preferences,
+and critical speech interruption use the same records.
+
 Build a deterministic alert engine before generative proactive behavior.
 
 ### Candidate alerts
@@ -492,6 +496,10 @@ A language layer may phrase an alert but cannot raise its severity.
 
 ## C10 — Computer Lite
 
+**Implementation status:** Optional-provider foundation implemented. ION can
+verify and run a separately supplied Lite GGUF model through a configured local
+llama.cpp server. No model binary is bundled or downloaded by ION.
+
 Add the first optional local language model.
 
 ### Responsibilities
@@ -530,6 +538,11 @@ Add the first optional local language model.
 
 ## C11 — Computer Enhanced
 
+**Implementation status:** Optional-provider foundation implemented. Enhanced
+uses the same restricted tools and policy executor as Lite, with configurable
+resource limits, hardware-aware Automatic selection, checksum-bound evaluation,
+and Lite/Command fallback.
+
 Add an optional larger local model.
 
 ### Improvements
@@ -558,6 +571,11 @@ Enhanced receives the same permissions and tools as Lite.
 - Model updates are independently versioned and verified.
 
 ## C12 — Public-release hardening
+
+**Implementation status:** Core technical safeguards are implemented and tested.
+Installer UX for selecting/downloading model components, broader accessibility
+and upgrade qualification, future remote-device review, and the external
+Frontier policy clarification remain release work rather than completed claims.
 
 ### Technical work
 

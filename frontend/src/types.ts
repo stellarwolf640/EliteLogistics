@@ -280,6 +280,17 @@ export interface Preferences {
     speech_volume: number;
     speech_input_mode: "disabled" | "push_to_talk";
     speech_confidence_threshold: number;
+    disabled_alert_categories: string[];
+    model_runtime_enabled: boolean;
+    model_server_path: string;
+    lite_model_manifest: string;
+    enhanced_model_manifest: string;
+    model_context_tokens: number;
+    model_memory_limit_mb: number;
+    model_gpu_layers: number;
+    model_evaluation_threshold: number;
+    model_evaluation_score: number | null;
+    model_evaluated_sha256: string;
   };
 }
 
@@ -345,6 +356,71 @@ export interface ComputerCommandResponse {
   reply: string;
   invocations: ComputerInvocation[];
   suggestions: string[];
+  runtime?: string;
+  runtime_version?: string | null;
+  runtime_latency_ms?: number | null;
+  runtime_warning?: string | null;
+}
+
+export interface ComputerAlert {
+  id: string;
+  fingerprint: string;
+  category: string;
+  severity: "critical" | "warning" | "information";
+  title: string;
+  message: string;
+  facts: Record<string, unknown>;
+  status: "active" | "acknowledged" | "resolved";
+  interrupt_allowed: boolean;
+  created_at: string;
+  updated_at: string;
+  acknowledged_at: string | null;
+}
+
+export interface ComputerModelStatus {
+  enabled: boolean;
+  server_available: boolean;
+  server_path: string | null;
+  running: boolean;
+  active_tier: "lite" | "enhanced" | null;
+  active_version: string | null;
+  active_sha256: string | null;
+  lite: { verified: boolean; version: string | null; status: string };
+  enhanced: { verified: boolean; version: string | null; status: string };
+  hardware: {
+    cpu_threads: number;
+    total_ram_mb: number;
+    gpu_detection: string;
+    platform: string;
+  };
+  context_tokens: number;
+  memory_limit_mb: number;
+  gpu_layers: number;
+  evaluation_score: number | null;
+  evaluation_threshold: number;
+  evaluation_current: boolean;
+  last_latency_ms: number | null;
+  last_error: string | null;
+  safety: {
+    local_loopback_only: boolean;
+    live_elite_context: boolean;
+    direct_game_control: boolean;
+    permission_changes: boolean;
+    policy_executor_required: boolean;
+    frontier_public_release_clearance: boolean;
+  };
+}
+
+export interface ComputerPrivacyStatus {
+  profile: string;
+  models_directory: string;
+  model_bytes: number;
+  alerts: number;
+  invocations: number;
+  local_only: boolean;
+  remote_model_access: boolean;
+  elite_files_are_read_only: boolean;
+  generative_live_elite_context: boolean;
 }
 
 export interface SpeechInputStatus {

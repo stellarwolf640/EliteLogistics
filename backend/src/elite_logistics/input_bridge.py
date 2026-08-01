@@ -268,6 +268,7 @@ class InputBridge:
         if not self._command_lock.acquire(blocking=False):
             raise RuntimeError("Another game-control action is already in progress.")
         self._active_action = action_id
+        action_started_at = time.monotonic()
         try:
             binding = self._keyboard_binding(action_id, context.bindings_directory)
             current = self._state(action_id, context.journal_directory)
@@ -279,6 +280,9 @@ class InputBridge:
                     "input_sent": False,
                     "verified": True,
                     "binding": binding.display,
+                    "latency_ms": round(
+                        (time.monotonic() - action_started_at) * 1000, 1
+                    ),
                 }
                 self._last_result = result
                 return result
@@ -312,6 +316,9 @@ class InputBridge:
                     binding,
                 )
             self._last_result = result
+            result["latency_ms"] = round(
+                (time.monotonic() - action_started_at) * 1000, 1
+            )
             event_bus.publish("computer.control.completed", result)
             return result
         finally:

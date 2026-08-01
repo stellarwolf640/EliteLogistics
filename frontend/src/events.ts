@@ -79,6 +79,16 @@ export function connectQueryEvents(queryClient: QueryClient) {
       void queryClient.invalidateQueries({ queryKey: ["computer-status"] });
       void queryClient.invalidateQueries({ queryKey: ["computer-invocations"] });
     }
+    if (event.type.startsWith("computer.alert.")) {
+      void queryClient.invalidateQueries({ queryKey: ["computer-alerts"] });
+    }
+    if (
+      event.type.startsWith("computer.model.")
+      || event.type === "computer.local_data.deleted"
+    ) {
+      void queryClient.invalidateQueries({ queryKey: ["computer-models"] });
+      void queryClient.invalidateQueries({ queryKey: ["computer-privacy"] });
+    }
     if (
       event.type.startsWith("computer.control.")
       || event.type.startsWith("computer.input_bridge.")

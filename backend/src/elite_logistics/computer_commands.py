@@ -184,6 +184,27 @@ def execute_command(
     session_id: str | None = None,
 ) -> dict[str, Any]:
     session_id = session_id or str(uuid4())
+    model_warning: str | None = None
+    if preferences.mode in {"lite", "enhanced", "automatic"}:
+        try:
+            from .computer_models import local_model_manager
+
+            model_status = local_model_manager.status(preferences)
+            if not model_status.get("evaluation_current"):
+                raise RuntimeError(
+                    "The selected local model has not passed its tool-selection evaluation."
+                )
+            decision = local_model_manager.interpret(text, preferences)
+            return _execute_model_decision(
+                text,
+                session_id,
+                decision,
+                preferences,
+            )
+        except RuntimeError as exc:
+            model_warning = (
+                f"{exc} Deterministic Command Mode handled this request instead."
+            )
     with _context_lock:
         context = dict(_contexts.get(session_id, {}))
     intent = interpret_command(text, context)
@@ -202,6 +223,8 @@ def execute_command(
             "Find a round trip within 100 ly",
             "Open route console",
         ],
+        "runtime": "command",
+        "runtime_warning": model_warning,
     }
     if intent.clarification or intent.confidence < 0.85:
         return response
@@ -293,6 +316,61 @@ def execute_command(
             "last_intent": intent.name,
             "arguments": intent.arguments,
         }
+    return response
+
+
+def _execute_model_decision(
+    text: str,
+    session_id: str,
+    decision: dict[str, Any],
+    preferences: ComputerPreferences,
+) -> dict[str, Any]:
+    clarification = decision.get("clarification")
+    response: dict[str, Any] = {
+        "session_id": session_id,
+        "text": text,
+        "intent": decision.get("tool_name") or "clarification",
+        "confidence": 1.0,
+        "clarification": clarification,
+        "reply": clarification or "",
+        "invocations": [],
+        "suggestions": [
+            "Brief me",
+            "Where am I?",
+            "What is my next stop?",
+            "Open route console",
+        ],
+        "runtime": decision.get("tier") or "local_model",
+        "runtime_version": decision.get("version"),
+        "runtime_latency_ms": decision.get("latency_ms"),
+        "runtime_warning": None,
+    }
+    if clarification or not decision.get("tool_name"):
+        response["reply"] = clarification or (
+            "The local model could not map that request to an allowlisted tool."
+        )
+        return response
+    invocation = invoke_tool(
+        str(decision["tool_name"]),
+        dict(decision.get("arguments") or {}),
+        InvocationSource.EXPLICIT_USER,
+        preferences,
+        timeout_seconds=30,
+    )
+    response["invocations"].append(invocation)
+    if invocation["status"] == "completed":
+        response["reply"] = (
+            f"{str(decision['tool_name']).replace('_', ' ').title()} completed. "
+            "The structured result is available in the invocation record."
+        )
+    elif invocation["status"] == "awaiting_confirmation":
+        response["reply"] = (
+            "Commander confirmation is required before the selected tool can run."
+        )
+    else:
+        response["reply"] = str(
+            invocation.get("error") or "The selected tool could not be completed."
+        )
     return response
 
 

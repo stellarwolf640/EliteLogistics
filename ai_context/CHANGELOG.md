@@ -77,6 +77,26 @@ This changelog records product and architectural changes that future agents need
   executor. Wake word remains unavailable and cannot listen in the background.
 - Added Computer UI controls for speech output, voice testing/dismissal,
   push-to-talk, microphone/listening visibility, and the confidence threshold.
+- Implemented C9's persisted deterministic alert engine with structured facts,
+  stable fingerprints, category cooldowns, acknowledgement, noncritical
+  snoozing/disabling, automatic resolution, and critical-only interruption.
+- Added optional C10/C11 llama.cpp-compatible Lite and Enhanced providers.
+  Manifests and model files are checksum-verified, models remain independently
+  removable, Automatic mode uses available RAM, and Enhanced falls back to Lite
+  when unavailable or above the configured memory limit.
+- Added a fixed model tool allowlist that excludes game-control and preference
+  tools. Model output never supplies tool results and every selected tool still
+  crosses the existing authorization and audit boundary.
+- Added model evaluation gating bound to the selected model checksum. Any
+  missing, corrupt, failed, or unevaluated runtime falls back to deterministic
+  Command Mode.
+- Added C12 recovery and privacy foundations: interrupted invocations fail
+  without retry after restart, model/microphone diagnostics, input latency
+  telemetry, local model shutdown, privacy inventory, and exact-phrase deletion
+  of audit/alert data and optional model files.
+- Generative runtimes deliberately receive no live Elite context. Public
+  generative use of that data remains blocked on written Frontier clarification;
+  no unattended automation or multi-step game execution was introduced.
 
 ## 0.2.3 — 2026-07-29
 

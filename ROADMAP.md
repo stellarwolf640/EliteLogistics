@@ -29,7 +29,7 @@ ION is offered and produced by IntraStellar Logistics (ISL).
 - Route-engine performance work for large local datasets
 - Accessibility and keyboard-navigation audit of the custom frame
 
-## Unreleased — Computer C0–C8
+## Unreleased — Computer C0–C12 technical foundation
 
 - Versioned Computer preferences and Command/Lite/Enhanced mode contracts
 - Provider-neutral tool and Class B control catalogues
@@ -48,9 +48,26 @@ ION is offered and produced by IntraStellar Logistics (ISL).
   duplicate suppression, selectable voice, volume, rate, and dismissal
 - C7a local Windows push-to-talk with visible transcript/confidence and
   low-confidence rejection
+- C9 persisted deterministic alerts with severity, structured facts,
+  deduplication, cooldown, acknowledgement, noncritical snooze/disable controls,
+  and critical speech interruption
+- C10/C11 optional Lite and Enhanced llama.cpp-compatible local runtimes with
+  manifest/checksum verification, CPU operation, configurable context/memory/GPU
+  limits, hardware-aware Automatic selection, evaluation gating, and
+  deterministic fallback
+- A restricted model tool allowlist that excludes direct game controls and
+  preference changes; all selected tools still use the shared policy executor
+- C12 restart recovery for interrupted invocations, model-corruption reporting,
+  model shutdown, microphone/model diagnostics, input latency telemetry,
+  migration coverage, local privacy status, and confirmation-gated deletion of
+  Computer history and optional model files
 - Canonical Computer capability and safety design
-- No language model or wake-word listener. Wake word remains a separately gated
-  C7b milestone after false-activation and microphone-selection work.
+- No model is bundled and no wake-word listener exists. Wake word remains a
+  separately gated C7b milestone after false-activation and
+  microphone-selection work.
+- Public generative use of live Elite data remains blocked pending written
+  Frontier clarification. Model runtimes receive no live Elite context until
+  that external policy gate is resolved.
 
 ## 0.3 — Relocation intelligence
 

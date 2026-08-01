@@ -70,6 +70,8 @@ NON_CANCELLABLE_SIDE_EFFECT_TOOLS = frozenset(
         "resume_operation",
         "cancel_operation",
         "replace_operation",
+        "snooze_alert",
+        "acknowledge_alert",
         "open_ion_view",
         "open_route_console",
         "populate_planner",
@@ -850,6 +852,25 @@ def _cancel_operation(_arguments: dict[str, Any]) -> dict[str, Any]:
     return {"canceled": True, "previous_operation": previous}
 
 
+def _snooze_alert(arguments: dict[str, Any]) -> dict[str, Any]:
+    from .computer_alerts import snooze_category
+
+    category = str(arguments.get("category") or "")
+    minutes = int(arguments.get("minutes") or 30)
+    with SessionLocal() as session:
+        return snooze_category(session, category, minutes)
+
+
+def _acknowledge_alert(arguments: dict[str, Any]) -> dict[str, Any]:
+    from .computer_alerts import acknowledge_alert
+
+    alert_id = str(arguments.get("alert_id") or "")
+    if not alert_id:
+        raise ValueError("Alert ID is required.")
+    with SessionLocal() as session:
+        return acknowledge_alert(session, alert_id)
+
+
 def _open_ion_view(arguments: dict[str, Any]) -> dict[str, Any]:
     target = str(arguments.get("view", "")).strip().casefold().replace(" ", "_")
     path = ION_ROUTES.get(target)
@@ -968,6 +989,8 @@ HANDLERS: dict[str, ToolHandler] = {
     "resume_operation": _resume_operation,
     "cancel_operation": _cancel_operation,
     "replace_operation": _replace_operation,
+    "snooze_alert": _snooze_alert,
+    "acknowledge_alert": _acknowledge_alert,
     "open_ion_view": _open_ion_view,
     "open_route_console": _open_route_console,
     "populate_planner": _populate_planner,

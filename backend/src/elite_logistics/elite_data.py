@@ -153,6 +153,11 @@ class ParsedEliteState:
     cargo_count: int = 0
     max_jump_range: float | None = None
     rebuy: int | None = None
+    fuel_level: float | None = None
+    fuel_capacity: float | None = None
+    fuel_percent: float | None = None
+    hull_health: float | None = None
+    canopy_health: float | None = None
     cargo: list[dict[str, Any]] = field(default_factory=list)
     target_system_id64: int | None = None
     target_system_name: str | None = None
@@ -253,6 +258,10 @@ class EliteDataReader:
             state.ship_name = event.get("ShipName") or state.ship_name
             state.ship_ident = event.get("ShipIdent") or state.ship_ident
             state.ship_id = event.get("ShipID") or state.ship_id
+            if event.get("FuelLevel") is not None:
+                state.fuel_level = float(event["FuelLevel"])
+            if event.get("FuelCapacity") is not None:
+                state.fuel_capacity = float(event["FuelCapacity"])
         elif kind == "Loadout":
             state.ship_model = event.get("Ship") or state.ship_model
             state.ship_name = event.get("ShipName") or state.ship_name
@@ -261,6 +270,25 @@ class EliteDataReader:
             state.cargo_capacity = int(event.get("CargoCapacity", state.cargo_capacity or 0))
             state.max_jump_range = float(event.get("MaxJumpRange", state.max_jump_range or 0))
             state.rebuy = int(event.get("Rebuy", state.rebuy or 0))
+            fuel_capacity = event.get("FuelCapacity")
+            if isinstance(fuel_capacity, dict):
+                state.fuel_capacity = float(fuel_capacity.get("Main") or 0)
+            elif fuel_capacity is not None:
+                state.fuel_capacity = float(fuel_capacity)
+        elif kind in ("FuelScoop", "ReservoirReplenished"):
+            if event.get("Total") is not None:
+                state.fuel_level = float(event["Total"])
+        elif kind == "RefuelAll":
+            if state.fuel_capacity is not None:
+                state.fuel_level = state.fuel_capacity
+        elif kind == "HullDamage":
+            if event.get("Health") is not None:
+                state.hull_health = max(0.0, min(100.0, float(event["Health"]) * 100))
+        elif kind == "RepairAll":
+            state.hull_health = 100.0
+            state.canopy_health = 100.0
+        elif kind == "CockpitBreached":
+            state.canopy_health = 0.0
         elif kind == "Location":
             self._set_system(event, state)
             state.docked = bool(event.get("Docked", False))
@@ -394,6 +422,18 @@ class EliteDataReader:
             else []
         )
         state.status_flags = [label for bit, label in RELEVANT_STATUS_FLAGS.items() if flags & bit]
+        fuel = payload.get("Fuel")
+        if isinstance(fuel, dict) and fuel.get("FuelMain") is not None:
+            state.fuel_level = float(fuel["FuelMain"])
+        if (
+            state.fuel_level is not None
+            and state.fuel_capacity is not None
+            and state.fuel_capacity > 0
+        ):
+            state.fuel_percent = round(
+                min(100.0, max(0.0, state.fuel_level / state.fuel_capacity * 100)),
+                1,
+            )
         if flags & 1:
             state.docked = True
             state.phase = "docked"

@@ -18,6 +18,7 @@ from .elite_monitor import elite_monitor
 from .events import event_bus, state_snapshot
 from .input_bridge import input_bridge
 from .speech_input import speech_recognizer
+from .computer_models import local_model_manager
 from .config import resource_path
 from .version import APP_VERSION
 
@@ -44,6 +45,7 @@ def create_app() -> FastAPI:
         try:
             yield
         finally:
+            local_model_manager.stop()
             speech_recognizer.cancel()
             input_bridge.stop()
             elite_monitor.stop()

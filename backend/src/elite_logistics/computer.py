@@ -39,6 +39,8 @@ EXECUTABLE_TOOL_NAMES = frozenset(
         "resume_operation",
         "cancel_operation",
         "replace_operation",
+        "snooze_alert",
+        "acknowledge_alert",
         "open_ion_view",
         "open_route_console",
         "populate_planner",
