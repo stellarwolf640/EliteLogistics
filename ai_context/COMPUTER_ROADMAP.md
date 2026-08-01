@@ -333,7 +333,7 @@ Example:
 - Command Mode performs well on low-end hardware.
 - The same tools remain usable by future AI modes.
 
-## C6 — Voice output
+## C6 — Voice output (implemented on the Computer branch)
 
 Add speech before speech recognition.
 
@@ -356,7 +356,7 @@ Add speech before speech recognition.
 - Repeated events do not create an announcement backlog.
 - Command Mode can use voice output without AI.
 
-## C7 — Speech recognition and wake word
+## C7 — Speech recognition and wake word (C7a push-to-talk implemented)
 
 Add voice commands only after manual and typed controls are stable.
 
@@ -367,6 +367,10 @@ Add voice commands only after manual and typed controls are stable.
 - Voice disabled.
 
 Push-to-talk is the safest default.
+
+Current branch status: local Windows push-to-talk is implemented against the
+Windows default input. Wake word and selectable input-device support remain
+separately gated C7b work and are not exposed as available modes.
 
 ### Voice pipeline
 
@@ -401,7 +405,7 @@ Policy and confirmation
 - Audio processing remains local by default.
 - Microphone failures degrade to text mode.
 
-## C8 — Planning and operation tool completion
+## C8 — Planning and operation tool completion (implemented on the Computer branch)
 
 Connect the remaining ION features.
 

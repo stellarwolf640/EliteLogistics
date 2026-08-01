@@ -29,7 +29,7 @@ ION is offered and produced by IntraStellar Logistics (ISL).
 - Route-engine performance work for large local datasets
 - Accessibility and keyboard-navigation audit of the custom frame
 
-## Unreleased — Computer C0–C3 (implemented)
+## Unreleased — Computer C0–C8
 
 - Versioned Computer preferences and Command/Lite/Enhanced mode contracts
 - Provider-neutral tool and Class B control catalogues
@@ -37,9 +37,20 @@ ION is offered and produced by IntraStellar Logistics (ISL).
 - Audited, policy-gated Read/ION tool execution and confirmations
 - Read-only Elite binding discovery, conflict reporting, and monitoring
 - Default-deny authorization, explicit-intent enforcement, and confirmations
+- Windows-local one-shot Input Bridge with foreground, rate, binding, desired
+  state, verification, and emergency-disable guards
+- Deterministic typed Command Mode and HOTAS-friendly manual controls
+- C8 planner parity for trades, round trips, Trade Routes, Profitable Transit,
+  cargo sales, commodity sourcing, comparisons, reachability, and replanning
+- Persisted operation activation, progress, pause/resume, replacement, and
+  cancellation through the shared policy executor
+- Offline installed-Edge voice output with queueing, priority interruption,
+  duplicate suppression, selectable voice, volume, rate, and dismissal
+- C7a local Windows push-to-talk with visible transcript/confidence and
+  low-confidence rejection
 - Canonical Computer capability and safety design
-- No model, voice, wake word, deterministic command interpreter, or game-input
-  execution yet
+- No language model or wake-word listener. Wake word remains a separately gated
+  C7b milestone after false-activation and microphone-selection work.
 
 ## 0.3 — Relocation intelligence
 
@@ -69,8 +80,6 @@ These remain product goals, not part of 0.2.0:
 
 - Optional ISL Linux service, accounts, company roles, job assignment, and statistics
 - Other profession modules, beginning only after their workflows are researched
-- A constrained local voice/command assistant using the same operation/event interfaces
-- Computer deterministic Command Mode, safe Input Bridge, voice adapters, and
-  optional local-model runtimes
+- Optional constrained local-model runtimes using the existing policy executor
 - Colonization logistics, passenger operations, exploration/exobiology, mining sales,
   Fleet Carrier support, and Community Goal logistics

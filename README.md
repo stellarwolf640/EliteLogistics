@@ -9,11 +9,13 @@ ION 0.2.3 includes one-way trades, round trips, immersion-oriented
 multi-stop Trade Routes, profitable transit, full-screen flight manifests,
 ship profiles, and ship optimization planning.
 
-The unreleased Computer C0–C5 work adds an in-universe policy console, audited
+The unreleased Computer C0–C8 work adds an in-universe policy console, audited
 Read/ION tools, read-only Elite binding discovery, a Windows-local one-shot
 Input Bridge, a manual HOTAS-friendly control deck, and deterministic typed
-commands. It does not use a language model, listen or speak, edit binding
-files, accept arbitrary keys, or automate multi-step gameplay.
+commands. It also adds planner/operation tools, optional installed-Edge speech
+output, and activation-gated local Windows push-to-talk. It does not use a
+language model, run a wake-word listener, edit binding files, accept arbitrary
+keys, or automate multi-step gameplay.
 
 The interface follows an Elite-style service hierarchy: begin at the home console, enter Trade Operations, Navigation, Fleet Management, or the Data Network, then select the individual planning service. Ship optimization includes complete core, optional, utility, and hardpoint recommendations for Cargo, Range, Safety, and Balanced roles.
 

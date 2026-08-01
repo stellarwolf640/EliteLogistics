@@ -366,9 +366,11 @@ def reset_computer_settings(
 @router.get("/computer/status")
 def computer_status(session: Session = Depends(get_session)) -> dict:
     from .input_bridge import input_bridge
+    from .speech_input import speech_recognizer
 
     preferences = _load_preferences(session).computer
     bridge_status = input_bridge.status()
+    speech_status = speech_recognizer.status()
     initial_tools = sum(tool.initial_release for tool in TOOL_DEFINITIONS)
     initial_controls = sum(control.initial_release for control in CONTROL_ACTIONS)
     return {
@@ -377,8 +379,12 @@ def computer_status(session: Session = Depends(get_session)) -> dict:
         "runtimes": {
             "command": "deterministic_ready",
             "language_model": "not_configured",
-            "speech_recognition": "not_configured",
-            "text_to_speech": "not_configured",
+            "speech_recognition": (
+                "push_to_talk_ready"
+                if speech_status["available"]
+                else "windows_local_unavailable"
+            ),
+            "text_to_speech": "edge_local_ready",
             "input_bridge": (
                 "emergency_disabled"
                 if bridge_status["emergency_disabled"]
@@ -397,7 +403,8 @@ def computer_status(session: Session = Depends(get_session)) -> dict:
         "execution_available": True,
         "executable_tools": sorted(EXECUTABLE_TOOL_NAMES),
         "warnings": [
-            "Lite, Enhanced, speech recognition, and speech output are not installed yet.",
+            "Lite and Enhanced language-model runtimes are not installed.",
+            "Wake-word activation is not available; speech input requires push-to-talk.",
             "Game input remains disabled until Class B and each action are explicitly enabled.",
         ],
     }
@@ -488,6 +495,80 @@ def run_computer_command(
         preferences,
         session_id=payload.session_id,
     )
+
+
+class PushToTalkStopInput(BaseModel):
+    session_id: str | None = Field(default=None, max_length=100)
+    execute: bool = True
+
+
+@router.get("/computer/speech-input/status")
+def computer_speech_input_status() -> dict:
+    from .speech_input import speech_recognizer
+
+    return speech_recognizer.status()
+
+
+@router.post("/computer/speech-input/start")
+def start_computer_speech_input(
+    session: Session = Depends(get_session),
+) -> dict:
+    from .speech_input import speech_recognizer
+
+    preferences = _load_preferences(session).computer
+    if (
+        not preferences.enabled
+        or preferences.mode != "command"
+        or preferences.speech_input_mode != "push_to_talk"
+    ):
+        raise HTTPException(
+            409,
+            "Enable Command mode and push-to-talk before starting speech input.",
+        )
+    try:
+        return speech_recognizer.start()
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.post("/computer/speech-input/stop")
+def stop_computer_speech_input(
+    payload: PushToTalkStopInput,
+    session: Session = Depends(get_session),
+) -> dict:
+    from .computer_commands import execute_command
+    from .speech_input import speech_recognizer
+
+    preferences = _load_preferences(session).computer
+    try:
+        recognition = speech_recognizer.stop()
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    text = recognition["text"]
+    confidence = recognition["confidence"]
+    accepted = bool(
+        text and confidence >= preferences.speech_confidence_threshold
+    )
+    command = None
+    if accepted and payload.execute:
+        command = execute_command(
+            text,
+            preferences,
+            session_id=payload.session_id,
+        )
+    return {
+        **recognition,
+        "accepted": accepted,
+        "threshold": preferences.speech_confidence_threshold,
+        "command": command,
+        "reason": (
+            None
+            if accepted
+            else "No speech was recognized."
+            if not text
+            else "Recognition confidence was below the configured action threshold."
+        ),
+    }
 
 
 @router.get("/computer/input-bridge")

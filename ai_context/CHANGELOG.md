@@ -54,6 +54,29 @@ This changelog records product and architectural changes that future agents need
   cockpit interfaces, and bounded power inputs.
 - Binding discovery remains read-only. The Input Bridge uses only an existing
   conflict-free keyboard binding and never accepts arbitrary key input.
+- Stabilized side-effect execution so its timeout applies only before an
+  execution slot is acquired. Once a one-shot ION or game action starts, ION
+  waits for its definitive result instead of reporting a timeout while the
+  action can still complete.
+- Implemented C8 planner tools on the production route engine for one-way
+  trades, round trips, Trade Routes, Profitable Transit, current-cargo sales,
+  commodity sourcing, comparisons, reachability, and replanning. Structured
+  requests retain reserve, pad, permit, station-access, freshness, and
+  confidence filters.
+- Implemented C8 operation activation, progress, reverse/skip, pause/resume,
+  replacement, completion, and cancellation against the persisted singleton
+  active operation. Activation, replacement, and cancellation retain immutable
+  commander confirmation.
+- Implemented C6 voice output with installed offline Edge/Windows voices,
+  selectable voice, rate, volume, queued delivery, duplicate suppression,
+  critical interruption hooks, critical-state ordinary-speech suppression,
+  dismissal, and visible-text fallback.
+- Implemented C7a activation-gated Windows-local push-to-talk using
+  `System.Speech`. Recognition text and confidence are returned to the UI;
+  requests below the configurable action threshold never enter the command
+  executor. Wake word remains unavailable and cannot listen in the background.
+- Added Computer UI controls for speech output, voice testing/dismissal,
+  push-to-talk, microphone/listening visibility, and the confidence threshold.
 
 ## 0.2.3 — 2026-07-29
 

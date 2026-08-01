@@ -7,13 +7,17 @@ from pydantic import ValidationError
 from sqlalchemy.orm import sessionmaker
 
 from elite_logistics.api import (
+    PushToTalkStopInput,
     computer_controls,
+    computer_speech_input_status,
     computer_status,
     computer_tools,
     execute_manual_computer_control,
     invoke_computer_tool,
     put_computer_settings,
     reset_computer_settings,
+    start_computer_speech_input,
+    stop_computer_speech_input,
 )
 from elite_logistics.computer import (
     CONTROL_ACTIONS,
@@ -29,7 +33,7 @@ from elite_logistics.computer_runtime import (
     resolve_confirmation,
 )
 from elite_logistics.computer_commands import execute_command, interpret_command
-from elite_logistics.database import ComputerInvocation
+from elite_logistics.database import ActiveOperation, ComputerInvocation
 from elite_logistics.elite_bindings import (
     binding_report,
     EliteBindingsMonitor,
@@ -233,6 +237,36 @@ def test_tool_timeout_returns_explicit_failure(session, monkeypatch):
 
     assert result["status"] == "timed_out"
     assert "exceeded" in result["error"]
+
+
+def test_side_effect_tool_never_reports_timeout_after_execution_starts(
+    session, monkeypatch
+):
+    _runtime_factory(session, monkeypatch)
+    preferences = ComputerPreferences(enabled=True, mode="command")
+    original = HANDLERS["show_information_card"]
+    completed = []
+
+    def slow_side_effect(_arguments):
+        time.sleep(0.03)
+        completed.append(True)
+        return {"shown": True}
+
+    HANDLERS["show_information_card"] = slow_side_effect
+    try:
+        result = invoke_tool(
+            "show_information_card",
+            {"body": "One definitive side effect."},
+            InvocationSource.EXPLICIT_USER,
+            preferences,
+            timeout_seconds=0.01,
+        )
+    finally:
+        HANDLERS["show_information_card"] = original
+
+    assert result["status"] == "completed"
+    assert result["result"] == {"shown": True}
+    assert completed == [True]
 
 
 def test_confirmation_cannot_approve_mutated_arguments(session, monkeypatch):
@@ -524,6 +558,158 @@ def test_command_endpoint_contract_rejects_background_activation():
             text="Landing gear down",
             activation="background",
         )
+
+    assert ComputerCommandInput(
+        text="Brief me",
+        activation="push_to_talk",
+    ).activation == "push_to_talk"
+
+
+def _planner_request() -> dict:
+    return {
+        "state": {
+            "origin_system_id64": 1,
+            "origin_station_market_id": 101,
+            "ship": {
+                "cargo_capacity": 100,
+                "laden_jump_range": 20,
+                "pad_size": "M",
+            },
+            "credits": 5_000_000,
+            "rebuy_reserve": 500_000,
+            "cash_reserve": 250_000,
+        },
+        "filters": {
+            "max_market_age_hours": 24,
+            "max_station_distance_ls": 2000,
+        },
+        "max_system_distance_ly": 80,
+    }
+
+
+def test_c8_planner_tools_share_the_production_engine(session, monkeypatch):
+    _runtime_factory(session, monkeypatch)
+    one_way = HANDLERS["search_one_way_trades"](
+        {"request": _planner_request()}
+    )
+    round_trip = HANDLERS["search_round_trips"](
+        {"request": _planner_request()}
+    )
+    routes = HANDLERS["plan_trade_route"](
+        {"request": _planner_request()}
+    )
+    source = HANDLERS["source_commodity"](
+        {
+            "request": _planner_request(),
+            "commodity": "Gold",
+            "quantity": 25,
+        }
+    )
+
+    assert any(route["commodity"] == "Gold" for route in one_way["routes"])
+    assert round_trip["routes"]
+    assert routes["routes"]
+    assert source["results"]
+    assert source["results"][0]["quantity"] == 25
+
+
+def test_c8_operation_lifecycle_persists_and_respects_confirmation(
+    session, monkeypatch
+):
+    _runtime_factory(session, monkeypatch)
+    preferences = ComputerPreferences(enabled=True, mode="command")
+    operation = {
+        "operation_type": "cargo_manifest",
+        "title": "Test circuit",
+        "route_payload": {
+            "legs": [
+                {"commodity": "Gold", "destination_system": "Beta"},
+                {"commodity": "Silver", "destination_system": "Gamma"},
+            ]
+        },
+    }
+
+    proposed = invoke_tool(
+        "activate_operation",
+        {"operation": operation},
+        InvocationSource.EXPLICIT_USER,
+        preferences,
+    )
+    assert proposed["status"] == "awaiting_confirmation"
+    activated = resolve_confirmation(
+        proposed["confirmation_id"], preferences, approve=True
+    )
+    assert activated["status"] == "completed"
+    assert session.get(ActiveOperation, 1).title == "Test circuit"
+
+    progressed = invoke_tool(
+        "set_operation_progress",
+        {"action": "advance"},
+        InvocationSource.EXPLICIT_USER,
+        preferences,
+    )
+    paused = invoke_tool(
+        "pause_operation",
+        {},
+        InvocationSource.EXPLICIT_USER,
+        preferences,
+    )
+    blocked = invoke_tool(
+        "set_operation_progress",
+        {"action": "advance"},
+        InvocationSource.EXPLICIT_USER,
+        preferences,
+    )
+    resumed = invoke_tool(
+        "resume_operation",
+        {},
+        InvocationSource.EXPLICIT_USER,
+        preferences,
+    )
+
+    assert progressed["result"]["operation"]["manual_progress"] == 1
+    assert paused["result"]["operation"]["status"] == "paused"
+    assert blocked["status"] == "failed"
+    assert resumed["result"]["operation"]["status"] == "active"
+
+
+def test_push_to_talk_is_explicit_and_rejects_low_confidence(
+    session, monkeypatch
+):
+    put_computer_settings(
+        ComputerPreferences(
+            enabled=True,
+            mode="command",
+            speech_input_mode="push_to_talk",
+            speech_confidence_threshold=0.85,
+        ),
+        session,
+    )
+    monkeypatch.setattr(
+        "elite_logistics.speech_input.speech_recognizer.start",
+        lambda: {
+            "available": True,
+            "active": True,
+            "engine": "test",
+            "microphone": "test",
+            "activation": "push_to_talk",
+            "wake_word_available": False,
+            "local_only": True,
+        },
+    )
+    monkeypatch.setattr(
+        "elite_logistics.speech_input.speech_recognizer.stop",
+        lambda: {"text": "landing gear down", "confidence": 0.6},
+    )
+
+    started = start_computer_speech_input(session)
+    result = stop_computer_speech_input(PushToTalkStopInput(), session)
+
+    assert computer_speech_input_status()["activation"] == "push_to_talk"
+    assert started["active"] is True
+    assert result["accepted"] is False
+    assert result["command"] is None
+    assert "confidence" in result["reason"].casefold()
 
 
 def test_manual_control_has_dedicated_api_and_generic_source_cannot_spoof_it(

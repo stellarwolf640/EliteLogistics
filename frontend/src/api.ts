@@ -19,6 +19,8 @@ import type {
   ComputerInvocation,
   ComputerCommandResponse,
   InputBridgeStatus,
+  SpeechInputStatus,
+  SpeechRecognitionResult,
   BindingReport,
 } from "./types";
 
@@ -81,6 +83,17 @@ export const api = {
     request<ComputerCommandResponse>("/api/computer/commands", {
       method: "POST",
       body: JSON.stringify({ text, activation: "typed", session_id }),
+    }),
+  speechInputStatus: () =>
+    request<SpeechInputStatus>("/api/computer/speech-input/status"),
+  startSpeechInput: () =>
+    request<SpeechInputStatus>("/api/computer/speech-input/start", {
+      method: "POST",
+    }),
+  stopSpeechInput: (session_id?: string) =>
+    request<SpeechRecognitionResult>("/api/computer/speech-input/stop", {
+      method: "POST",
+      body: JSON.stringify({ session_id, execute: true }),
     }),
   inputBridgeStatus: () => request<InputBridgeStatus>("/api/computer/input-bridge"),
   emergencyDisableInputBridge: () =>

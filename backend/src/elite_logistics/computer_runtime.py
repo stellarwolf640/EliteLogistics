@@ -30,15 +30,57 @@ from .database import (
     Station,
     System,
 )
+from .engine import (
+    confidence,
+    distance,
+    find_immersive_trade_routes,
+    find_round_trips,
+    find_trades,
+    jump_count,
+    plan_transit,
+    station_allowed,
+)
 from .elite_bindings import binding_report, default_bindings_directory
 from .elite_data import EliteDataReader, default_journal_directory
 from .events import event_bus
 from .input_bridge import BridgeContext, input_bridge, keyboard_binding_supported
-from .schemas import ComputerPreferences
+from .schemas import (
+    ActiveOperationInput,
+    ComputerPreferences,
+    PlayerState,
+    SearchFilters,
+    TradeSearchRequest,
+    TransitRequest,
+)
 
 
 ToolHandler = Callable[[dict[str, Any]], dict[str, Any]]
 _execution_slots = threading.BoundedSemaphore(4)
+
+# Once one of these handlers begins, reporting a caller timeout would be
+# misleading: the side effect may already have happened and cannot safely be
+# canceled. Their timeout therefore applies only while waiting for an execution
+# slot. After they start, ION waits for the definitive result and never invites
+# a retry against an action that may still be running.
+NON_CANCELLABLE_SIDE_EFFECT_TOOLS = frozenset(
+    {
+        "activate_operation",
+        "set_operation_progress",
+        "pause_operation",
+        "resume_operation",
+        "cancel_operation",
+        "replace_operation",
+        "open_ion_view",
+        "open_route_console",
+        "populate_planner",
+        "change_search_filters",
+        "show_information_card",
+        "show_diagnostics",
+        "set_ship_system",
+        "open_game_interface",
+        "set_power_distribution",
+    }
+)
 
 ION_ROUTES = {
     "home": "/",
@@ -338,6 +380,476 @@ def _next_instruction(_arguments: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+PLANNER_ASSUMPTIONS = [
+    "Jump counts use 85% of laden range as a conservative routing factor.",
+    "Travel times are estimates; exact star-by-star routing remains in-game.",
+    "Market prices are observations and may change before arrival.",
+]
+
+
+def _trade_request(arguments: dict[str, Any]) -> TradeSearchRequest:
+    payload = arguments.get("request", arguments)
+    if not isinstance(payload, dict):
+        raise ValueError("A structured trade-search request is required.")
+    return TradeSearchRequest.model_validate(payload)
+
+
+def _transit_request(arguments: dict[str, Any]) -> TransitRequest:
+    payload = arguments.get("request", arguments)
+    if not isinstance(payload, dict):
+        raise ValueError("A structured transit request is required.")
+    return TransitRequest.model_validate(payload)
+
+
+def _search_one_way_trades(arguments: dict[str, Any]) -> dict[str, Any]:
+    request = _trade_request(arguments)
+    with SessionLocal() as session:
+        routes = find_trades(session, request)
+    return {
+        "kind": "one_way_trade",
+        "routes": [route.model_dump(mode="json") for route in routes],
+        "available_credits": request.state.available_credits,
+        "assumptions": PLANNER_ASSUMPTIONS,
+    }
+
+
+def _search_round_trips(arguments: dict[str, Any]) -> dict[str, Any]:
+    request = _trade_request(arguments)
+    with SessionLocal() as session:
+        routes = find_round_trips(session, request)
+    return {
+        "kind": "round_trip",
+        "routes": [route.model_dump(mode="json") for route in routes],
+        "available_credits": request.state.available_credits,
+        "assumptions": PLANNER_ASSUMPTIONS,
+    }
+
+
+def _plan_trade_route(arguments: dict[str, Any]) -> dict[str, Any]:
+    request = _trade_request(arguments)
+    with SessionLocal() as session:
+        routes = find_immersive_trade_routes(session, request)
+    return {
+        "kind": "trade_route",
+        "routes": [route.model_dump(mode="json") for route in routes],
+        "assumptions": PLANNER_ASSUMPTIONS
+        + [
+            "Trade Routes favor continuity, route length, commodity variety, "
+            "and confidence over maximum profit."
+        ],
+    }
+
+
+def _plan_profitable_transit(arguments: dict[str, Any]) -> dict[str, Any]:
+    request = _transit_request(arguments)
+    with SessionLocal() as session:
+        result = plan_transit(session, request)
+    return {
+        "kind": "profitable_transit",
+        **result.model_dump(mode="json"),
+        "assumptions": PLANNER_ASSUMPTIONS,
+    }
+
+
+def _normalize_commodity_name(value: str) -> str:
+    return "".join(character for character in value.casefold() if character.isalnum())
+
+
+def _commodity_candidates(
+    session: Any,
+    name: str,
+) -> list[Commodity]:
+    normalized = _normalize_commodity_name(name)
+    commodities = session.scalars(select(Commodity)).all()
+    exact = [
+        item
+        for item in commodities
+        if normalized
+        in {
+            _normalize_commodity_name(item.canonical_name),
+            _normalize_commodity_name(item.display_name),
+        }
+    ]
+    if exact:
+        return exact
+    return [
+        item
+        for item in commodities
+        if normalized
+        and (
+            normalized in _normalize_commodity_name(item.canonical_name)
+            or normalized in _normalize_commodity_name(item.display_name)
+        )
+    ]
+
+
+def _market_destination_rows(
+    session: Any,
+    *,
+    state: PlayerState,
+    filters: SearchFilters,
+    commodity_ids: list[int],
+    quantity: int,
+    selling: bool,
+    radius: float,
+) -> list[dict[str, Any]]:
+    origin = session.get(System, state.origin_system_id64)
+    if origin is None:
+        raise ValueError("The origin system is not in the local dataset.")
+    observations = session.scalars(
+        select(MarketObservation)
+        .where(MarketObservation.commodity_id.in_(commodity_ids))
+    ).all()
+    rows: list[dict[str, Any]] = []
+    now = _now()
+    for observation in observations:
+        station = observation.station
+        system = station.system
+        system_distance = distance(origin, system)
+        if system_distance > radius or not station_allowed(
+            station, system, state, filters
+        ):
+            continue
+        liquidity = observation.demand if selling else observation.supply
+        price = observation.sell_price if selling else observation.buy_price
+        if price <= 0 or liquidity < quantity:
+            continue
+        seconds = 60 + jump_count(
+            system_distance, state.ship.laden_jump_range
+        ) * 55
+        score, rating = confidence(
+            observed_at=observation.observed_at,
+            arrival_seconds=seconds,
+            max_age_hours=filters.max_market_age_hours,
+            supply=observation.supply,
+            demand=observation.demand,
+            quantity=quantity,
+            fleet_carrier=station.fleet_carrier,
+            now=now,
+        )
+        if filters.hide_low_confidence and rating == "Low":
+            continue
+        rows.append(
+            {
+                "commodity_id": observation.commodity_id,
+                "commodity": observation.commodity.display_name,
+                "market_id": station.market_id,
+                "station": station.name,
+                "system_id64": system.id64,
+                "system": system.name,
+                "price": price,
+                "quantity": quantity,
+                "liquidity": liquidity,
+                "estimated_value": price * quantity,
+                "distance_ly": round(system_distance, 2),
+                "jumps": jump_count(
+                    system_distance, state.ship.laden_jump_range
+                ),
+                "confidence_score": score,
+                "confidence": rating,
+                "observed_at": observation.observed_at.isoformat(),
+                "provider": observation.provider,
+            }
+        )
+    rows.sort(
+        key=lambda row: (
+            row["price"] if selling else -row["price"],
+            row["confidence_score"],
+            -row["distance_ly"],
+        ),
+        reverse=True,
+    )
+    return rows
+
+
+def _find_cargo_sale(arguments: dict[str, Any]) -> dict[str, Any]:
+    request = _trade_request(arguments)
+    manifest = arguments.get("cargo")
+    if manifest is None:
+        manifest = _elite_state().get("cargo") or []
+    if not isinstance(manifest, list) or not manifest:
+        return {
+            "kind": "cargo_sale",
+            "results": [],
+            "warning": "No cargo manifest is available.",
+            "assumptions": PLANNER_ASSUMPTIONS,
+        }
+    results: list[dict[str, Any]] = []
+    with SessionLocal() as session:
+        for item in manifest:
+            if not isinstance(item, dict):
+                continue
+            name = str(
+                item.get("name")
+                or item.get("Name_Localised")
+                or item.get("Name")
+                or ""
+            )
+            quantity = int(item.get("count") or item.get("Count") or 0)
+            commodities = _commodity_candidates(session, name)
+            if not commodities or quantity <= 0:
+                continue
+            candidates = _market_destination_rows(
+                session,
+                state=request.state,
+                filters=request.filters,
+                commodity_ids=[commodity.id for commodity in commodities],
+                quantity=quantity,
+                selling=True,
+                radius=request.max_system_distance_ly,
+            )
+            results.extend(candidates[:5])
+    return {
+        "kind": "cargo_sale",
+        "results": results,
+        "assumptions": PLANNER_ASSUMPTIONS,
+    }
+
+
+def _source_commodity(arguments: dict[str, Any]) -> dict[str, Any]:
+    request = _trade_request(arguments)
+    name = str(arguments.get("commodity", "")).strip()
+    quantity = int(arguments.get("quantity") or request.state.ship.cargo_capacity)
+    if not name:
+        raise ValueError("Commodity name is required.")
+    if quantity <= 0 or quantity > request.state.ship.cargo_capacity:
+        raise ValueError("Quantity must fit within the configured cargo capacity.")
+    with SessionLocal() as session:
+        commodities = _commodity_candidates(session, name)
+        if not commodities:
+            return {
+                "kind": "commodity_source",
+                "commodity": name,
+                "quantity": quantity,
+                "results": [],
+                "warning": "The commodity is not present in the local dataset.",
+                "assumptions": PLANNER_ASSUMPTIONS,
+            }
+        results = _market_destination_rows(
+            session,
+            state=request.state,
+            filters=request.filters,
+            commodity_ids=[commodity.id for commodity in commodities],
+            quantity=quantity,
+            selling=False,
+            radius=request.max_system_distance_ly,
+        )
+    return {
+        "kind": "commodity_source",
+        "commodity": name,
+        "quantity": quantity,
+        "results": results[:20],
+        "assumptions": PLANNER_ASSUMPTIONS,
+    }
+
+
+def _compare_plans(arguments: dict[str, Any]) -> dict[str, Any]:
+    plans = arguments.get("plans")
+    if not isinstance(plans, list) or len(plans) < 2:
+        raise ValueError("At least two structured plans are required.")
+    rows = []
+    for index, plan in enumerate(plans[:10]):
+        if not isinstance(plan, dict):
+            raise ValueError("Each plan must be an object.")
+        rows.append(
+            {
+                "index": index,
+                "name": str(
+                    plan.get("name")
+                    or plan.get("profile")
+                    or plan.get("title")
+                    or f"Plan {index + 1}"
+                )[:120],
+                "profit": int(
+                    plan.get("total_profit")
+                    or plan.get("expected_profit")
+                    or plan.get("trip_profit")
+                    or 0
+                ),
+                "estimated_seconds": int(plan.get("estimated_seconds") or 0),
+                "distance_ly": float(
+                    plan.get("total_distance_ly")
+                    or plan.get("system_distance_ly")
+                    or 0
+                ),
+                "confidence": str(plan.get("confidence") or "Unknown"),
+                "warnings": list(plan.get("warnings") or []),
+            }
+        )
+    best_profit = max(rows, key=lambda row: row["profit"])["index"]
+    fastest = min(
+        rows,
+        key=lambda row: row["estimated_seconds"]
+        if row["estimated_seconds"] > 0
+        else float("inf"),
+    )["index"]
+    return {
+        "kind": "plan_comparison",
+        "plans": rows,
+        "best_profit_index": best_profit,
+        "fastest_index": fastest,
+    }
+
+
+def _estimate_reachability(arguments: dict[str, Any]) -> dict[str, Any]:
+    state_payload = arguments.get("state")
+    if not isinstance(state_payload, dict):
+        raise ValueError("Structured commander state is required.")
+    state = PlayerState.model_validate(state_payload)
+    filters = SearchFilters.model_validate(arguments.get("filters") or {})
+    destination_system_id64 = int(arguments.get("destination_system_id64") or 0)
+    destination_market_id = arguments.get("destination_station_market_id")
+    with SessionLocal() as session:
+        origin = session.get(System, state.origin_system_id64)
+        destination = session.get(System, destination_system_id64)
+        if origin is None or destination is None:
+            raise ValueError("Origin or destination is not in the local dataset.")
+        system_distance = distance(origin, destination)
+        station = (
+            session.get(Station, int(destination_market_id))
+            if destination_market_id
+            else None
+        )
+        blockers = []
+        if destination.permit_required and not filters.include_permit_systems:
+            blockers.append("Destination requires a permit.")
+        if station and not station_allowed(station, destination, state, filters):
+            blockers.append("Destination station conflicts with the current access filters.")
+    return {
+        "reachable": not blockers,
+        "distance_ly": round(system_distance, 2),
+        "estimated_jumps": jump_count(
+            system_distance, state.ship.laden_jump_range
+        ),
+        "blockers": blockers,
+        "assumptions": [
+            "Fuel-star availability and exact star-by-star routing must be verified in-game."
+        ],
+    }
+
+
+def _replan_from_current_state(arguments: dict[str, Any]) -> dict[str, Any]:
+    kind = str(arguments.get("kind", "one_way")).casefold()
+    handlers = {
+        "one_way": _search_one_way_trades,
+        "round_trip": _search_round_trips,
+        "trade_route": _plan_trade_route,
+        "transit": _plan_profitable_transit,
+    }
+    handler = handlers.get(kind)
+    if handler is None:
+        raise ValueError("Replan kind must be one_way, round_trip, trade_route, or transit.")
+    result = handler(arguments)
+    result["replanned"] = True
+    return result
+
+
+def _operation_payload(arguments: dict[str, Any]) -> ActiveOperationInput:
+    payload = arguments.get("operation", arguments)
+    if not isinstance(payload, dict):
+        raise ValueError("A structured operation is required.")
+    return ActiveOperationInput.model_validate(payload)
+
+
+def _write_operation(payload: ActiveOperationInput, *, replaced: bool) -> dict[str, Any]:
+    now = _now()
+    with SessionLocal() as session:
+        record = session.get(ActiveOperation, 1)
+        values = payload.model_dump()
+        if record is None:
+            record = ActiveOperation(id=1, updated_at=now, **values)
+            session.add(record)
+        else:
+            for key, value in values.items():
+                setattr(record, key, value)
+            record.updated_at = now
+        session.commit()
+    result = _active_operation()
+    event_bus.publish(
+        "operation.replaced" if replaced else "operation.changed", result
+    )
+    return {"operation": result}
+
+
+def _activate_operation(arguments: dict[str, Any]) -> dict[str, Any]:
+    return _write_operation(_operation_payload(arguments), replaced=False)
+
+
+def _replace_operation(arguments: dict[str, Any]) -> dict[str, Any]:
+    return _write_operation(_operation_payload(arguments), replaced=True)
+
+
+def _set_operation_progress(arguments: dict[str, Any]) -> dict[str, Any]:
+    action = str(arguments.get("action", "advance")).casefold()
+    delta_by_action = {
+        "advance": 1,
+        "arrive": 1,
+        "load": 1,
+        "sell": 1,
+        "skip": 1,
+        "back": -1,
+        "reverse": -1,
+    }
+    if action not in delta_by_action:
+        raise ValueError("Unknown operation progress action.")
+    with SessionLocal() as session:
+        record = session.get(ActiveOperation, 1)
+        if record is None:
+            raise ValueError("No operation is active.")
+        if record.status == "paused":
+            raise ValueError("Resume the operation before changing progress.")
+        legs = (record.route_payload or {}).get("legs") or []
+        maximum = len(legs) if legs else 10000
+        record.manual_progress = max(
+            0, min(maximum, record.manual_progress + delta_by_action[action])
+        )
+        if legs and record.manual_progress >= len(legs):
+            record.status = "completed"
+        record.updated_at = _now()
+        session.commit()
+    result = _active_operation()
+    event_bus.publish("operation.progressed", result)
+    return {"action": action, "operation": result}
+
+
+def _set_operation_status(status: str) -> dict[str, Any]:
+    with SessionLocal() as session:
+        record = session.get(ActiveOperation, 1)
+        if record is None:
+            raise ValueError("No operation is active.")
+        if record.status == "completed":
+            raise ValueError("A completed operation cannot be paused or resumed.")
+        record.status = status
+        record.updated_at = _now()
+        session.commit()
+    result = _active_operation()
+    event_bus.publish("operation.changed", result)
+    return {"operation": result}
+
+
+def _pause_operation(_arguments: dict[str, Any]) -> dict[str, Any]:
+    return _set_operation_status("paused")
+
+
+def _resume_operation(_arguments: dict[str, Any]) -> dict[str, Any]:
+    return _set_operation_status("active")
+
+
+def _cancel_operation(_arguments: dict[str, Any]) -> dict[str, Any]:
+    with SessionLocal() as session:
+        record = session.get(ActiveOperation, 1)
+        if record is None:
+            return {"canceled": False, "operation": None}
+        previous = {
+            "title": record.title,
+            "manual_progress": record.manual_progress,
+        }
+        session.delete(record)
+        session.commit()
+    event_bus.publish("operation.changed", None)
+    return {"canceled": True, "previous_operation": previous}
+
+
 def _open_ion_view(arguments: dict[str, Any]) -> dict[str, Any]:
     target = str(arguments.get("view", "")).strip().casefold().replace(" ", "_")
     path = ION_ROUTES.get(target)
@@ -441,6 +953,21 @@ HANDLERS: dict[str, ToolHandler] = {
     "inspect_current_system": _inspect_current_system,
     "get_active_operation": _get_active_operation,
     "get_next_instruction": _next_instruction,
+    "search_one_way_trades": _search_one_way_trades,
+    "search_round_trips": _search_round_trips,
+    "plan_trade_route": _plan_trade_route,
+    "plan_profitable_transit": _plan_profitable_transit,
+    "find_cargo_sale": _find_cargo_sale,
+    "source_commodity": _source_commodity,
+    "compare_plans": _compare_plans,
+    "estimate_reachability": _estimate_reachability,
+    "replan_from_current_state": _replan_from_current_state,
+    "activate_operation": _activate_operation,
+    "set_operation_progress": _set_operation_progress,
+    "pause_operation": _pause_operation,
+    "resume_operation": _resume_operation,
+    "cancel_operation": _cancel_operation,
+    "replace_operation": _replace_operation,
     "open_ion_view": _open_ion_view,
     "open_route_console": _open_route_console,
     "populate_planner": _populate_planner,
@@ -514,12 +1041,24 @@ def _execute_record(invocation_id: str, timeout_seconds: float) -> dict[str, Any
         event_bus.publish("computer.invocation.started", _serialize_invocation(record))
         arguments = dict(record.arguments)
 
-    output: Queue[tuple[str, Any]] = Queue(maxsize=1)
     if not _execution_slots.acquire(timeout=timeout_seconds):
         result = None
         status = "timed_out"
         error = "Computer execution capacity was unavailable before the timeout."
+    elif record.tool_name in NON_CANCELLABLE_SIDE_EFFECT_TOOLS:
+        try:
+            result = handler(arguments)
+            status = "completed"
+            error = None
+        except Exception as exc:
+            result = None
+            status = "failed"
+            error = str(exc) or type(exc).__name__
+        finally:
+            _execution_slots.release()
     else:
+        output: Queue[tuple[str, Any]] = Queue(maxsize=1)
+
         def run_handler() -> None:
             try:
                 output.put(("completed", handler(arguments)))

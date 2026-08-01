@@ -274,6 +274,12 @@ export interface Preferences {
     enabled_game_actions: string[];
     confirmation_policy: "always" | "recommended" | "minimal";
     bindings_directory: string;
+    speech_output_enabled: boolean;
+    speech_voice: string;
+    speech_rate: number;
+    speech_volume: number;
+    speech_input_mode: "disabled" | "push_to_talk";
+    speech_confidence_threshold: number;
   };
 }
 
@@ -339,6 +345,25 @@ export interface ComputerCommandResponse {
   reply: string;
   invocations: ComputerInvocation[];
   suggestions: string[];
+}
+
+export interface SpeechInputStatus {
+  available: boolean;
+  active: boolean;
+  engine: string;
+  microphone: string;
+  activation: "push_to_talk";
+  wake_word_available: false;
+  local_only: true;
+}
+
+export interface SpeechRecognitionResult {
+  text: string;
+  confidence: number;
+  accepted: boolean;
+  threshold: number;
+  command: ComputerCommandResponse | null;
+  reason: string | null;
 }
 
 export interface InputBridgeStatus {

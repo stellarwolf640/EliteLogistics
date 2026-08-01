@@ -19,6 +19,9 @@ import {
   Terminal,
   Send,
   AlertOctagon,
+  Mic,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
@@ -38,6 +41,7 @@ import { useSearchDraft } from "./useSearchDraft";
 import { optimizeShip, SHIP_CATALOG, type OptimizationMode } from "./shipCatalog";
 import { connectQueryEvents } from "./events";
 import { desktopCall } from "./desktopBridge";
+import { speechOutput } from "./speech";
 
 const routeLabels: Record<string, string[]> = {
   "/": ["HOME"],
@@ -766,12 +770,17 @@ export function ComputerPage() {
   const bindings = useQuery({ queryKey: ["computer-bindings"], queryFn: api.computerBindings });
   const invocations = useQuery({ queryKey: ["computer-invocations"], queryFn: api.computerInvocations });
   const bridge = useQuery({ queryKey: ["computer-input-bridge"], queryFn: api.inputBridgeStatus });
+  const speech = useQuery({ queryKey: ["computer-speech-input"], queryFn: api.speechInputStatus });
   const [result, setResult] = useState<ComputerInvocation | null>(null);
   const [bindingsDirectory, setBindingsDirectory] = useState("");
   const [commandText, setCommandText] = useState("");
   const [commandSession, setCommandSession] = useState<string>();
   const [transcript, setTranscript] = useState<ComputerCommandResponse[]>([]);
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [speechMessage, setSpeechMessage] = useState("");
+  const [listening, setListening] = useState(false);
   const commandInput = useRef<HTMLInputElement>(null);
+  const listeningStart = useRef<Promise<unknown> | null>(null);
   const save = useMutation({
     mutationFn: api.updateComputerSettings,
     onSuccess: () => {
@@ -815,7 +824,38 @@ export function ComputerPage() {
       setTranscript((current) => [...current.slice(-19), value]);
       setCommandText("");
       if (value.invocations.length) setResult(value.invocations.at(-1) ?? null);
+      if (settings) speechOutput.speak(value.reply, settings);
       void queryClient.invalidateQueries({ queryKey: ["computer-invocations"] });
+    },
+  });
+  const startSpeech = useMutation({
+    mutationFn: api.startSpeechInput,
+    onSuccess: (value) => queryClient.setQueryData(["computer-speech-input"], value),
+  });
+  const stopSpeech = useMutation({
+    mutationFn: () => api.stopSpeechInput(commandSession),
+    onSuccess: (value) => {
+      setListening(false);
+      setSpeechMessage(
+        value.accepted
+          ? `Recognized at ${Math.round(value.confidence * 100)}% confidence.`
+          : value.reason ?? "No speech was recognized.",
+      );
+      if (value.command) {
+        setCommandSession(value.command.session_id);
+        setTranscript((current) => [...current.slice(-19), value.command!]);
+        if (value.command.invocations.length) {
+          setResult(value.command.invocations.at(-1) ?? null);
+        }
+        if (settings) speechOutput.speak(value.command.reply, settings);
+      }
+      void speech.refetch();
+      void queryClient.invalidateQueries({ queryKey: ["computer-invocations"] });
+    },
+    onError: (error) => {
+      setListening(false);
+      setSpeechMessage(error.message);
+      void speech.refetch();
     },
   });
   const emergency = useMutation({
@@ -845,6 +885,14 @@ export function ComputerPage() {
     window.addEventListener("keydown", focusCommand);
     return () => window.removeEventListener("keydown", focusCommand);
   }, []);
+  useEffect(() => {
+    const refreshVoices = () => setVoices(speechOutput.voices());
+    refreshVoices();
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.addEventListener("voiceschanged", refreshVoices);
+      return () => window.speechSynthesis.removeEventListener("voiceschanged", refreshVoices);
+    }
+  }, []);
   const patch = (change: Partial<ComputerPreferences>) => {
     if (settings) save.mutate({ ...settings, ...change });
   };
@@ -872,6 +920,31 @@ export function ComputerPage() {
   const submitCommand = (text = commandText) => {
     const value = text.trim();
     if (value && !command.isPending) command.mutate(value);
+  };
+  const beginPushToTalk = () => {
+    if (
+      listening
+      || startSpeech.isPending
+      || settings?.speech_input_mode !== "push_to_talk"
+    ) return;
+    setSpeechMessage("Listening through the Windows default microphone…");
+    setListening(true);
+    listeningStart.current = startSpeech.mutateAsync().catch((error: Error) => {
+      setListening(false);
+      setSpeechMessage(error.message);
+      throw error;
+    });
+  };
+  const endPushToTalk = async () => {
+    if (!listening || stopSpeech.isPending) return;
+    try {
+      await listeningStart.current;
+      stopSpeech.mutate();
+    } catch {
+      // The start mutation already exposed the local recognizer error.
+    } finally {
+      listeningStart.current = null;
+    }
   };
   const manualControl = (
     tool: "set_ship_system" | "open_game_interface" | "set_power_distribution",
@@ -955,6 +1028,26 @@ export function ComputerPage() {
         <div className="runtime-strip">
           {Object.entries(status.data?.runtimes ?? {}).map(([name, value]) => <div key={name}><span>{name.replaceAll("_", " ")}</span><strong>{value.replaceAll("_", " ")}</strong></div>)}
         </div>
+        <div className="voice-settings">
+          <div>
+            <span className="eyebrow">C6 / local voice output</span>
+            <h3>Installed Edge voices</h3>
+            <p>Replies stay visible if speech is disabled or a voice fails. Critical announcements can interrupt and clear ordinary queued speech.</p>
+          </div>
+          <label className="toggle"><input type="checkbox" checked={settings?.speech_output_enabled ?? false} onChange={(event) => patch({ speech_output_enabled: event.target.checked })} /><span className="switch">●</span>Speak Computer replies</label>
+          <label className="field"><span>Voice</span>
+            <select value={settings?.speech_voice ?? ""} onChange={(event) => patch({ speech_voice: event.target.value })}>
+              <option value="">Windows default</option>
+              {voices.map((voice) => <option key={voice.voiceURI} value={voice.voiceURI}>{voice.name} · {voice.lang}</option>)}
+            </select>
+          </label>
+          <label className="field"><span>Rate · {(settings?.speech_rate ?? 1).toFixed(1)}×</span><input type="range" min=".5" max="2" step=".1" value={settings?.speech_rate ?? 1} onChange={(event) => patch({ speech_rate: Number(event.target.value) })} /></label>
+          <label className="field"><span>Volume · {Math.round((settings?.speech_volume ?? 1) * 100)}%</span><input type="range" min="0" max="1" step=".05" value={settings?.speech_volume ?? 1} onChange={(event) => patch({ speech_volume: Number(event.target.value) })} /></label>
+          <div className="voice-actions">
+            <button className="secondary" disabled={!settings?.speech_output_enabled} onClick={() => settings && speechOutput.speak("ION Computer voice output online.", settings)}><Volume2 size={16} /> Test voice</button>
+            <button className="secondary" onClick={() => speechOutput.dismiss()}><VolumeX size={16} /> Dismiss speech</button>
+          </div>
+        </div>
       </section>
 
       <section className="planner-panel command-console">
@@ -982,7 +1075,34 @@ export function ComputerPage() {
             aria-label="Computer command"
           />
           <button className="primary" type="submit" disabled={!commandText.trim() || command.isPending || !settings?.enabled || settings.mode !== "command"}><Send size={16} /> Execute</button>
+          <button
+            className={`push-to-talk ${listening ? "listening" : ""}`}
+            type="button"
+            disabled={
+              !speech.data?.available
+              || settings?.speech_input_mode !== "push_to_talk"
+              || stopSpeech.isPending
+            }
+            onPointerDown={(event) => {
+              event.currentTarget.setPointerCapture(event.pointerId);
+              beginPushToTalk();
+            }}
+            onPointerUp={() => void endPushToTalk()}
+            onPointerCancel={() => void endPushToTalk()}
+          ><Mic size={16} /> {listening ? "Release to execute" : "Hold to talk"}</button>
         </form>
+        <div className="speech-input-settings">
+          <label className="field"><span>Speech activation</span>
+            <select value={settings?.speech_input_mode ?? "disabled"} onChange={(event) => patch({ speech_input_mode: event.target.value as ComputerPreferences["speech_input_mode"] })}>
+              <option value="disabled">Disabled</option>
+              <option value="push_to_talk">Push to talk · local</option>
+              <option disabled>Wake word · separately gated</option>
+            </select>
+          </label>
+          <label className="field"><span>Action confidence · {Math.round((settings?.speech_confidence_threshold ?? .85) * 100)}%</span><input type="range" min=".5" max="1" step=".01" value={settings?.speech_confidence_threshold ?? .85} onChange={(event) => patch({ speech_confidence_threshold: Number(event.target.value) })} /></label>
+          <div><span className="eyebrow">{speech.data?.active || listening ? "Microphone listening" : "Microphone muted"}</span><p>{speech.data?.microphone ?? "Windows default input"} · local only · wake word disabled</p></div>
+        </div>
+        {speechMessage && <Notice tone="info">{speechMessage}</Notice>}
         <div className="command-suggestions">
           {(transcript.at(-1)?.suggestions ?? ["Brief me", "Where am I?", "What is my next stop?", "Find a round trip within 100 ly", "Open route console"]).map((suggestion) => (
             <button className="secondary" key={suggestion} disabled={!settings?.enabled || settings.mode !== "command" || command.isPending} onClick={() => submitCommand(suggestion)}>{suggestion}</button>

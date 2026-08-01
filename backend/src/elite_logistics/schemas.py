@@ -230,6 +230,12 @@ class ComputerPreferences(BaseModel):
     enabled_game_actions: list[str] = Field(default_factory=list, max_length=100)
     confirmation_policy: Literal["always", "recommended", "minimal"] = "recommended"
     bindings_directory: str = Field(default="", max_length=1000)
+    speech_output_enabled: bool = False
+    speech_voice: str = Field(default="", max_length=200)
+    speech_rate: float = Field(default=1.0, ge=0.5, le=2.0)
+    speech_volume: float = Field(default=1.0, ge=0.0, le=1.0)
+    speech_input_mode: Literal["disabled", "push_to_talk"] = "disabled"
+    speech_confidence_threshold: float = Field(default=0.85, ge=0.5, le=1.0)
 
     @field_validator("enabled_game_actions")
     @classmethod
@@ -250,7 +256,7 @@ class ComputerToolInvocationInput(BaseModel):
 
 class ComputerCommandInput(BaseModel):
     text: str = Field(min_length=1, max_length=500)
-    activation: Literal["typed"] = "typed"
+    activation: Literal["typed", "push_to_talk"] = "typed"
     session_id: str | None = Field(default=None, max_length=100)
 
 
